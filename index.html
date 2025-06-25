@@ -1,0 +1,2076 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grasshopper Mesh & UI Viewer</title>
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@48,400,0,0');
+
+    body { margin: 0; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1a252f; color: white; }
+    #viewer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; }
+    
+    .panel-container { background: rgba(20, 22, 25, 0.50); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; }
+    .panel-title { background: rgba(255, 255, 255, 0.05); padding: 8px 15px; font-weight: 600; cursor: pointer; user-select: none; font-size: 14px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+    #left-panel-wrapper { 
+        position: absolute; top: 10px; left: 10px; z-index: 10; display: flex; gap: 0;
+        max-height: calc(100vh - 20px); transition: transform 0.3s ease-in-out; 
+    }
+    #left-panel-wrapper, #controls-panel-container { user-select: none; -webkit-user-select: none; }
+    #left-panel-tabs {
+        display: flex; flex-direction: column; gap: 5px; background: rgba(20, 22, 25, 0.50); 
+        backdrop-filter: blur(8px); padding: 5px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.1); 
+        align-self: flex-start; flex-shrink: 0;
+    }
+    .tab-button {
+        font-family: 'Material Symbols Outlined'; font-size: 24px; color: #aaa; background: transparent; border: none; 
+        padding: 10px; cursor: pointer; border-radius: 5px; transition: background-color 0.2s, color 0.2s;
+    }
+    .tab-button:hover { color: #fff; }
+    .tab-button.active { background-color: #4a4a52; color: #fff; }
+
+    #left-panel-content-container { width: 350px; margin-left: 10px; opacity: 1; }
+    #left-panel-wrapper.collapsed #left-panel-content-container { width: 0; margin-left: 0; opacity: 0; }
+    #left-panel-wrapper.collapsed { pointer-events: none; }
+    #left-panel-wrapper.collapsed #left-panel-tabs { pointer-events: auto; }
+    
+    #panel-toggle-button {
+        margin-top: auto; font-family: 'Material Symbols Outlined'; font-size: 24px; color: #aaa; background: transparent;
+        border: none; padding: 10px; cursor: pointer; border-radius: 5px; 
+        transition: background-color 0.2s, color 0.2s, transform 0.3s ease-in-out;
+    }
+    #panel-toggle-button:hover { color: #fff; background-color: rgba(255,255,255,0.1); }
+    #left-panel-wrapper.collapsed #panel-toggle-button { transform: rotate(180deg); }
+
+    #left-panel-content-container .panel-container { display: none; height: 100%; }
+    #left-panel-content-container .panel-container.active { display: flex; }
+    #left-panel-content-container .panel-content { flex-grow: 1; overflow-y: auto; }
+
+    #controls-panel-container { position: absolute; top: 10px; right: 10px; min-width: 300px; max-width: 500px; width: 360px; max-height: 95%; height: 95%; resize: horizontal; display: none; z-index: 10; }
+    #controls-panel-container .panel-title::after { content: '−'; font-weight: bold; transition: transform 0.3s ease; }
+    #controls-panel-container.collapsed { height: 35px; resize: none; }
+    #controls-panel-container.collapsed .panel-title::after { content: '+'; transform: rotate(180deg); }
+    #controls-panel-container .panel-content { flex-grow: 1; overflow-y: auto; }
+    .panel-content { padding: 15px; }
+
+    .info-group { margin-bottom: 12px; }
+    .info-group label { display: block; margin-bottom: 5px; font-size: 13px; font-weight: 600; }
+    .visibility-toggle-group { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    .visibility-toggle-group label { margin-bottom: 0; font-size: 14px; font-weight: normal; }
+    
+    .radio-group { display: flex; justify-content: space-between; background: #2a2a2e; border-radius: 5px; padding: 3px; }
+    .radio-group label { flex: 1; text-align: center; padding: 6px 0; font-size: 12px; font-weight: 600; cursor: pointer; border-radius: 4px; transition: background-color 0.2s, color 0.2s; color: #aaa; }
+    .radio-group input[type="radio"] { display: none; }
+    .radio-group input[type="radio"]:checked + label { background-color: #4a4a52; color: white; }
+
+    input, button, select { width: 100%; padding: 10px; border-radius: 5px; border: 1px solid #555; background: #333; color: white; box-sizing: border-box; font-size: 14px; }
+    input[type="file"] { padding: 5px; background: #444; }
+    input[type="file"]::file-selector-button { background: #555; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; }
+
+    input[type="number"] { padding: 5px 8px; font-size: 12px; text-align: right; -moz-appearance: textfield; }
+    input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    input:disabled, button:disabled, select:disabled { opacity: 0.5; cursor: not-allowed; background: #2b2b2b; }
+    
+    button.connect-btn { background: #007bff; }
+    button.disconnect-btn { background: #c82333; }
+    
+    .status { padding: 4px 10px; border-radius: 10px; font-size: 12px; display: inline-block; }
+    .status.connected { background: #28a745; }
+    .status.disconnected { background: #dc3545; }
+    .status.connecting { background: #ffc107; color: #333; }
+    .stats { font-size: 13px; color: #ccc; margin-top: 10px; line-height: 1.6; }
+    
+    .control-group { margin-bottom: 15px; }
+    .control-group > label { display: block; margin-bottom: 8px; font-size: 13px; font-weight: 600; }
+
+    .slider-container { display: flex; align-items: center; gap: 8px; }
+    .slider-container .slider-label { font-size: 11px; font-weight: normal; min-width: 50px; flex-shrink: 0; }
+    .slider-container input[type=range] { flex-grow: 1; margin: 0; }
+    .slider-container input[type=number] { width: 55px; flex-shrink: 0; padding: 4px; font-size: 11px; }
+    input[type=range]:disabled, input[type=number]:disabled { opacity: 0.4; cursor: not-allowed; }
+    
+    .vector-input-group { display: flex; gap: 5px; }
+    .vector-input-group input { text-align: center; }
+
+    .switch { position: relative; display: inline-block; width: 50px; height: 28px; flex-shrink: 0; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .switch .slider-knob { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #555; transition: .4s; border-radius: 28px; }
+    .switch .slider-knob:before { position: absolute; content: ""; height: 20px; width: 20px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
+    input:checked + .slider-knob { background-color: #28a745; }
+    input:checked + .slider-knob:before { transform: translateX(22px); }
+    
+    button.ui-button { width: 100%; padding: 10px; background: #444; color: white; border: 1px solid #666; border-radius: 10px; cursor: pointer; font-weight: bold; transition: background-color 0.15s ease, transform 0.1s ease; }
+    button.ui-button:hover { background: #555; }
+    button.ui-button:active { background: #666; transform: translateY(1px); }
+    
+    select { -webkit-appearance: none; appearance: none; background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="8" viewBox="0 0 12 8"><path fill="%23ffffff" d="M6 8L0 2h12z"/></svg>'); background-repeat: no-repeat; background-position: right 10px center; padding-right: 30px; cursor: pointer; }
+    
+    #inspector-details { border-top: 1px solid #444; margin-top: 15px; padding-top: 15px; }
+    #inspector-details[hidden] { display: none; }
+    .info-dl { font-size: 12px; }
+    .info-dl dt { float: left; width: 60px; color: #aaa; }
+    .info-dl dd { margin-left: 65px; font-weight: 600; color: white; }
+    #inspector-material-controls .info-group > label { font-size: 13px; margin-bottom: 8px; font-weight: 600; color: white; }
+    #inspector-material-controls .slider-container { gap: 5px; margin-bottom: 5px;}
+    .inspector-separator { border: 0; height: 1px; background: #444; margin: 15px 0; }
+    
+    /* Connection Mode Buttons */
+    .mode-selector { display: flex; gap: 5px; margin-bottom: 10px; }
+    .mode-select-btn { flex: 1; background: #444; border-color: #666; }
+    .mode-select-btn.active { background: #007bff; border-color: #007bff; }
+    .mode-select-btn:disabled { background: #2b2b2b !important; border-color: #444 !important; opacity: 0.5; cursor: not-allowed;}
+    .mode-content-area { display: none; padding: 15px; background: #2a2a2e; border-radius: 5px; }
+</style>
+
+<script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.177.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.177.0/examples/jsm/"
+      }
+    }
+</script>
+<script async type="text/javascript" src="https://unpkg.com/rhino3dm@8.0.0-beta3/rhino3dm.js"></script>
+</head>
+<body>
+    <div id="viewer"></div>
+
+    <div id="left-panel-wrapper">
+        <div id="left-panel-tabs">
+            <button class="tab-button active" data-panel="info-panel-container" title="Info & Connection">info</button>
+            <button class="tab-button" data-panel="paths-panel-container" title="Paths & Servers">folder</button>
+            <button class="tab-button" data-panel="lighting-panel-container" title="Scene & Lighting">wb_incandescent</button>
+            <button class="tab-button" data-panel="camera-panel-container" title="Camera Controls">photo_camera</button>
+            <button class="tab-button" data-panel="sun-path-panel-container" title="Sun Path Simulation">clear_day</button>
+            <button class="tab-button" id="object-inspector-tab" data-panel="object-inspector-container" title="Object Inspector" style="display: none;">ev_shadow</button>
+            <button id="panel-toggle-button" title="Collapse Panel">chevron_left</button>
+        </div>
+        <div id="left-panel-content-container">
+            <div id="info-panel-container" class="panel-container active">
+                <div class="panel-title">Info & Connection</div>
+                <div id="info-panel" class="panel-content"></div>
+            </div>
+            <div id="paths-panel-container" class="panel-container">
+                <div class="panel-title">Paths & Servers</div>
+                <div id="paths-panel" class="panel-content"></div>
+            </div>
+            <div id="lighting-panel-container" class="panel-container">
+                <div class="panel-title">Scene & Lighting</div>
+                <div id="lighting-panel" class="panel-content"></div>
+            </div>
+            <div id="camera-panel-container" class="panel-container">
+                <div class="panel-title">Camera Controls</div>
+                <div id="camera-panel" class="panel-content"></div>
+            </div>
+            <div id="sun-path-panel-container" class="panel-container">
+                <div class="panel-title">Sun Path Simulation</div>
+                <div id="sun-path-panel" class="panel-content"></div>
+            </div>
+            <div id="object-inspector-container" class="panel-container">
+                <div class="panel-title">Object Inspector</div>
+                <div id="object-inspector" class="panel-content"></div>
+            </div>
+        </div>
+    </div>
+
+
+    <div id="controls-panel-container" class="panel-container">
+        <div class="panel-title">Grasshopper Controls</div>
+        <div id="controls-panel" class="panel-content"></div>
+    </div>
+
+    <script src="https://unpkg.com/suncalc@1.8.0/suncalc.js"></script>
+    
+    <!-- Flatbuffers scripts only used for Direct Mode -->
+    <script src="./flatbuffers.js"></script>
+    <script src="./MeshStream_generated.js"></script>
+
+    <!-- Main application logic as a module -->
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+        import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { OutlinePass } from 'three/addons/postprocessing/OutlinePass.js';
+        import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+        import { Rhino3dmLoader } from "three/addons/loaders/3DMLoader.js";
+
+
+        class RhinoComputeManager {
+            constructor() {
+                this.serverUrl = 'http://localhost:5000';
+                this.apiKey = '';
+                this.definitionPointer = null;
+                this.definitionParams = null;
+                this.ghFileContent = null;
+            }
+
+            setServerUrl(url) { this.serverUrl = url; }
+            setApiKey(key) { this.apiKey = key; }
+
+            fileToBase64(file) {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.readAsDataURL(file);
+                    reader.onload = () => {
+                        this.ghFileContent = reader.result.split(',')[1];
+                        resolve(this.ghFileContent);
+                    };
+                    reader.onerror = error => reject(error);
+                });
+            }
+
+            camelCaseKeys(obj) {
+                if (Array.isArray(obj)) return obj.map(item => this.camelCaseKeys(item));
+                if (obj !== null && typeof obj === 'object') {
+                    const result = {};
+                    for (const key in obj) {
+                        const camelKey = key.charAt(0).toLowerCase() + key.slice(1);
+                        result[camelKey] = this.camelCaseKeys(obj[key]);
+                    }
+                    return result;
+                }
+                return obj;
+            }
+
+            async loadDefinition(file) {
+                this.definitionPointer = null; // Reset pointer on new file load
+                const base64 = await this.fileToBase64(file);
+                
+                const response = await fetch(`${this.serverUrl}/io`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', ...(this.apiKey ? { 'RhinoComputeKey': this.apiKey } : {}) },
+                    body: JSON.stringify({ algo: base64, pointer: null })
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`Server error (${response.status}): ${errorText}`);
+                }
+
+                const result = await response.json();
+                this.definitionParams = this.camelCaseKeys(result);
+                return this.definitionParams;
+            }
+
+            async compute(values) {
+                const payload = {
+                    algo: this.definitionPointer ? null : this.ghFileContent,
+                    pointer: this.definitionPointer,
+                    values: values
+                };
+
+                const response = await fetch(`${this.serverUrl}/grasshopper`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', ...(this.apiKey ? { 'RhinoComputeKey': this.apiKey } : {}) },
+                    body: JSON.stringify(payload)
+                });
+                
+                const responseJson = await response.json();
+
+                if (!response.ok) {
+                    const error = new Error(`Compute error (${response.status})`);
+                    error.responseJson = responseJson;
+                    throw error;
+                }
+
+                if (responseJson.pointer) {
+                    this.definitionPointer = responseJson.pointer;
+                }
+                return responseJson;
+            }
+        }
+        
+        class SunPathVisualizer {
+            constructor(scene, sunLight = null) {
+                this.scene = scene; this.sunLight = sunLight; this.group = new THREE.Group();
+                this.scene.add(this.group); this.group.visible = false; this.radius = 50;
+                this.pathMaterial = new THREE.LineBasicMaterial({ color: 0xffa500, transparent: true, opacity: 0.7 });
+                this.hourMarkerMaterial = new THREE.MeshBasicMaterial({ color: 0xffa500 });
+                this.sunMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+                this.helperLineMaterial = new THREE.LineBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.8, depthTest: false });
+            }
+            sphericalToCartesian(r, az, alt) { const x = r*Math.cos(alt)*Math.sin(az); const y = r*Math.sin(alt); const z = -r*Math.cos(alt)*Math.cos(az); return new THREE.Vector3(x,y,z); }
+            setVisible(v) { this.group.visible = v; }
+            update(date, lat, lon, time) {
+                this.group.children.forEach(c => { if (c.geometry) c.geometry.dispose(); });
+                this.group.clear(); if (!this.group.visible) return;
+                const pathPoints = [];
+                for (let i=0; i<=24; i+=0.25) { const h = new Date(date); h.setUTCHours(i); const p = SunCalc.getPosition(h, lat, lon); if (p.altitude > 0) pathPoints.push(this.sphericalToCartesian(this.radius, p.azimuth + Math.PI, p.altitude)); }
+                if (pathPoints.length>1) { const g = new THREE.BufferGeometry().setFromPoints(pathPoints); const l = new THREE.Line(g, this.pathMaterial); this.group.add(l); }
+                for (let i=6; i<=18; i++) { const h = new Date(date); h.setUTCHours(i); const p = SunCalc.getPosition(h, lat, lon); if (p.altitude > 0) { const mPos = this.sphericalToCartesian(this.radius, p.azimuth + Math.PI, p.altitude); const mGeom = new THREE.SphereGeometry(0.5, 8, 8); const mMesh = new THREE.Mesh(mGeom, this.hourMarkerMaterial); mMesh.position.copy(mPos); this.group.add(mMesh); } }
+                const curDate = new Date(date); curDate.setUTCHours(time, (time % 1) * 60); const curPos = SunCalc.getPosition(curDate, lat, lon);
+                if (curPos.altitude > 0) {
+                    const sunPos = this.sphericalToCartesian(this.radius, curPos.azimuth + Math.PI, curPos.altitude);
+                    const sunGeom = new THREE.SphereGeometry(1.2, 16, 16); const sunMesh = new THREE.Mesh(sunGeom, this.sunMaterial); sunMesh.position.copy(sunPos); this.group.add(sunMesh);
+                    const gProj = sunPos.clone(); gProj.y = 0; const lPts = [new THREE.Vector3(0,0,0), gProj, sunPos];
+                    const lGeom = new THREE.BufferGeometry().setFromPoints(lPts); const hLines = new THREE.Line(lGeom, this.helperLineMaterial); this.group.add(hLines);
+                    if (this.sunLight) this.sunLight.position.copy(sunPos);
+                } else { if (this.sunLight) this.sunLight.position.set(0, -100, 0); }
+            }
+        }
+
+        class Viewer {
+            constructor() {
+                this.operatingMode = 'direct';
+                this.rcManager = new RhinoComputeManager();
+                this.websocket = null;
+                this.meshObjects = new Map();
+                this.isInteracting = false; 
+                this.throttleTimer = null; 
+                this.throttleDelay = 30;
+                this.rgbeLoader = new RGBELoader();
+                this.textureLoader = new THREE.TextureLoader();
+                this.backgroundDiv = null;
+                this.sunLight = null;
+                this.ambientLight = null;
+                this.defaultLight1 = null;
+                this.defaultLight2 = null;
+                this.customSpotlight = null;
+                this.customFillLight = null;
+                this.spotLightHelper = null;
+                this.groundPlane = null;
+                this.gridHelper = null;
+                this.visibleGroundMaterial = null;
+                this.shadowCatcherMaterial = null;
+                this.selectedObjectId = null;
+                this.composer = null;
+                this.outlinePass = null;
+                this.sunPathVisualizer = null;
+                this.gltfExporter = new GLTFExporter();
+                this.defaultCube = null;
+                this.camera = null;
+                this.dollyZoomState = { lockedViewHeight: null };
+                this.rhino = null; 
+                this.rhinoLoader = new Rhino3dmLoader();
+                this.rhinoLoader.setLibraryPath('https://unpkg.com/rhino3dm@8.0.0-beta3/');
+                this.initScene();
+            }
+
+            async handleLoadGhDefinition() {
+                const fileInput = document.getElementById('ghFileInput');
+                const file = fileInput.files[0];
+                if (!file) {
+                    console.warn('Please select a Grasshopper file first.');
+                    this.updateStatus('disconnected', 'Select a GH file');
+                    return;
+                }
+                
+                this.rcManager.setServerUrl(document.getElementById('rhinoComputeUrl').value);
+                this.updateStatus('connecting', 'Loading GH definition...');
+
+                try {
+                    const params = await this.rcManager.loadDefinition(file);
+                    this.switchToRhinoComputeMode(params);
+                } catch (error) {
+                    console.error('Failed to load GH definition:', error);
+                    this.updateStatus('disconnected', 'Error loading GH file');
+                }
+            }
+
+            switchToRhinoComputeMode(params) {
+                this.handleModeChange('rhinoCompute', true);
+                this.populateControlsFromRhinoCompute(params);
+                this.triggerRhinoCompute(); 
+            }
+
+            resetToDirectMode() {
+                this.handleModeChange('direct', false);
+                document.getElementById('ghFileInput').value = '';
+                document.getElementById('controls-panel-container').style.display = 'none';
+                document.getElementById('controls-panel').innerHTML = '';
+            }
+
+            handleModeChange(newMode, isRCFileLoaded = false) {
+                this.operatingMode = newMode;
+                this.disconnect();
+                
+                document.getElementById('selectDirectModeBtn').classList.toggle('active', newMode === 'direct');
+                document.getElementById('directModeContent').style.display = newMode === 'direct' ? 'block' : 'none';
+                
+                document.getElementById('selectRCModeBtn').classList.toggle('active', newMode === 'rhinoCompute');
+                document.getElementById('rcModeContent').style.display = newMode === 'rhinoCompute' ? 'block' : 'none';
+
+                document.getElementById('rhinoComputeLoadArea').style.display = isRCFileLoaded ? 'none' : 'block';
+                document.getElementById('rcControlArea').style.display = isRCFileLoaded ? 'block' : 'none';
+                
+                document.getElementById('selectDirectModeBtn').disabled = isRCFileLoaded;
+            }
+
+            getControlHtmlFromRhinoCompute(param) {
+                const id = param.name.replace(/\s+/g, '_');
+                const name = param.name;
+                let html = '';
+                
+                const isIntegerSlider = param.paramType === 'Integer' && param.hasOwnProperty('minimum') && param.hasOwnProperty('maximum');
+                const isFloatSlider = param.paramType === 'Number' && param.hasOwnProperty('minimum') && param.hasOwnProperty('maximum');
+
+                if (isIntegerSlider || isFloatSlider) {
+                    const min = param.minimum;
+                    const max = param.maximum;
+                    const val = param.default;
+                    let step = isIntegerSlider ? 1 : (max - min) / 100;
+                    if (param.hasOwnProperty('by')) step = param.by;
+                    
+                    let decimals = isIntegerSlider ? 0 : 2;
+                    if(!isIntegerSlider && step < 1 && step > 0) {
+                        const stepStr = step.toString();
+                        if (stepStr.includes('.')) {
+                            decimals = stepStr.split('.')[1].length;
+                        }
+                    }
+
+                    html = `<div class="control-group" data-param-name="${param.name}" data-param-type="slider">
+                                <label>${name}</label>
+                                <div class="slider-container">
+                                    <input type="range" id="${id}" class="ui-slider" min="${min}" max="${max}" value="${val}" step="${step}">
+                                    <span id="${id}_val" class="slider-value" data-decimals="${decimals}">${parseFloat(val).toFixed(decimals)}</span>
+                                </div>
+                            </div>`;
+                } else if (param.paramType === 'Boolean') {
+                    const checked = param.default ? "checked" : "";
+                    html = `<div class="control-group" data-param-name="${param.name}" data-param-type="toggle">
+                                <label>${name}</label>
+                                <div class="switch-container">
+                                    <label class="switch">
+                                        <input type="checkbox" id="${id}" class="ui-toggle" ${checked}>
+                                        <span class="slider-knob"></span>
+                                    </label>
+                                </div>
+                            </div>`;
+                } else { // Fallback to text input
+                     const value = param.default || '';
+                     const isNumber = param.paramType === 'Integer' || param.paramType === 'Number';
+                     html = `<div class="control-group" data-param-name="${param.name}" data-param-type="text">
+                                <label>${name}</label>
+                                <input type="${isNumber ? 'number' : 'text'}" id="${id}" class="ui-text" value="${value}" ${isNumber ? 'step="1"' : ''}>
+                             </div>`;
+                }
+                return html;
+            }
+
+            populateControlsFromRhinoCompute(definitionParams) {
+                const panelContainer = document.getElementById('controls-panel-container');
+                const container = document.getElementById('controls-panel');
+                const inputs = definitionParams.inputs || [];
+
+                container.innerHTML = '';
+                panelContainer.style.display = inputs.length > 0 ? 'flex' : 'none';
+                if (inputs.length === 0) return;
+                
+                inputs.forEach(param => {
+                    const html = this.getControlHtmlFromRhinoCompute(param);
+                    if (html) container.insertAdjacentHTML('beforeend', html);
+                });
+                this.attachEventListeners();
+            }
+
+            collectRhinoComputeInputs() {
+                const trees = [];
+                document.querySelectorAll('#controls-panel .control-group').forEach(group => {
+                    const paramName = group.dataset.paramName;
+                    const paramType = group.dataset.paramType;
+                    let value;
+
+                    if (paramType === 'slider') {
+                        value = parseFloat(group.querySelector('.ui-slider').value);
+                    } else if (paramType === 'toggle') {
+                        value = group.querySelector('.ui-toggle').checked;
+                    } else if (paramType === 'text') {
+                        const input = group.querySelector('.ui-text');
+                        value = input.type === 'number' ? parseFloat(input.value) : input.value;
+                    }
+                    
+                    trees.push({
+                        ParamName: paramName,
+                        InnerTree: { "{0}": [{ data: JSON.stringify(value) }] }
+                    });
+                });
+                return trees;
+            }
+
+            triggerRhinoCompute() {
+                if (this.throttleTimer) clearTimeout(this.throttleTimer);
+                this.throttleTimer = setTimeout(async () => {
+                    this.updateStatus('connecting', 'Computing...');
+                    const values = this.collectRhinoComputeInputs();
+                    try {
+                        const results = await this.rcManager.compute(values);
+                        await this.processRhinoComputeResults(results);
+                        this.updateStatus('connected', 'RC Mode Active');
+                    } catch(error) {
+                        console.error("Rhino.Compute call failed:", error);
+                        if (error.responseJson) {
+                            console.log("Attempting to process geometry from error response...");
+                            await this.processRhinoComputeResults(error.responseJson);
+                            this.updateStatus('connected', 'RC Mode (with server error)');
+                        } else {
+                            this.updateStatus('disconnected', 'Compute Error');
+                        }
+                    }
+                }, this.throttleDelay);
+            }
+
+
+// rhinocompute geos - mesh only
+         async processRhinoComputeResults(results) {
+            const rhino = this.rhino;
+            // Helper functions (decodeItem, isMeshGeometry) should be defined here or accessible in this scope
+
+            // --- Stage 1: Decode Rhino.Compute results into a rhinoDoc and then parse into a THREE.Object3D ---
+            const rhinoDoc = new rhino.File3dm();
+
+            // Local helper function: decodeItem
+            function decodeItem(item) {
+                const data = JSON.parse(item.data);
+                if (item.type === 'System.String') {
+                    try { return rhino.DracoCompression.decompressBase64String(data); } catch {}
+                } else if (typeof data === 'object') {
+                    return rhino.CommonObject.decode(data);
+                }
+                return null;
+            }
+
+            // Local helper function: isMeshGeometry
+            function isMeshGeometry(rhinoObject) {
+                if (!rhinoObject) return false;
+                const objectType = rhinoObject.objectType;
+                return objectType === rhino.ObjectType.Mesh ||
+                       objectType === rhino.ObjectType.SubD ||
+                       (rhinoObject.geometry && rhinoObject.geometry.objectType === rhino.ObjectType.Mesh);
+            }
+
+
+            if (!results || !results.values) {
+                console.error('Invalid results structure:', results);
+                this.updateObjectInspector();
+                if (rhinoDoc) rhinoDoc.delete();
+                return;
+            }
+
+            // console.log('Processing Rhino.Compute results (meshes only):', results); // Optional: less verbose
+
+            const values = results.values;
+            let meshCountInRhinoDoc = 0;
+            let skippedCount = 0;
+
+            for (let i = 0; i < values.length; i++) {
+                const outputItem = values[i];
+                const tree = outputItem.InnerTree || outputItem.innerTree;
+                if (tree) {
+                    for (const path in tree) {
+                        const branch = tree[path];
+                        for (let j = 0; j < branch.length; j++) {
+                            const rhinoObject = decodeItem(branch[j]);
+                            if (rhinoObject !== null) {
+                                if (isMeshGeometry(rhinoObject)) {
+                                    rhinoDoc.objects().add(rhinoObject, null);
+                                    meshCountInRhinoDoc++;
+                                } else {
+                                    skippedCount++;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            // console.log(`RhinoDoc processing complete: ${meshCountInRhinoDoc} meshes added to rhinoDoc, ${skippedCount} non-mesh objects skipped`);
+
+            if (rhinoDoc.objects().count < 1) {
+                // console.warn("No mesh geometry found in Rhino.Compute response to load into scene.");
+                 // Still, cleanup any existing RC objects if no new ones are coming
+                const oldRcRootObjectsToRemoveOnEmpty = [];
+                this.scene.traverse(sceneChild => {
+                    if (sceneChild.userData && sceneChild.userData.isRhinoCompute) {
+                        oldRcRootObjectsToRemoveOnEmpty.push(sceneChild);
+                    }
+                });
+                oldRcRootObjectsToRemoveOnEmpty.forEach(rootObj => {
+                    this.scene.remove(rootObj);
+                    rootObj.traverse(subChild => {
+                        if (subChild.isMesh) {
+                            if (subChild.geometry) subChild.geometry.dispose();
+                            if (subChild.material) {
+                                if (Array.isArray(subChild.material)) {
+                                    subChild.material.forEach(m => { if (m.dispose) m.dispose(); });
+                                } else if (subChild.material.dispose) {
+                                    subChild.material.dispose();
+                                }
+                            }
+                        }
+                    });
+                });
+                const keysToDeleteFromMapOnEmpty = [];
+                for (const id of this.meshObjects.keys()) {
+                    if (id.startsWith('rc_mesh_')) keysToDeleteFromMapOnEmpty.push(id);
+                }
+                keysToDeleteFromMapOnEmpty.forEach(id => this.meshObjects.delete(id));
+
+                this.updateObjectInspector();
+                rhinoDoc.delete();
+                return;
+            }
+            // console.log(`RhinoDoc contains ${rhinoDoc.objects().count} mesh geometry objects for scene loading.`);
+
+            const buffer = new Uint8Array(rhinoDoc.toByteArray()).buffer;
+            rhinoDoc.delete();
+
+            let newLoadedObjectGroup = null;
+            let parseSucceededOnce = false;
+
+            try {
+                await new Promise((resolve, reject) => {
+                    this.rhinoLoader.parse(buffer, (loadedObject) => {
+                        if (parseSucceededOnce) {
+                            // console.warn('Rhino3dmLoader.parse callback executed more than once. Ignoring subsequent calls.');
+                            return;
+                        }
+                        parseSucceededOnce = true;
+
+                        // console.log('Successfully parsed 3DM buffer. Preparing object group:', loadedObject);
+                        
+                        loadedObject.userData.isRhinoCompute = true;
+                        loadedObject.rotation.x = -Math.PI / 2;
+
+                        loadedObject.traverse(child => {
+                    if (child.isMesh) {
+                        child.userData.castShadow = true; // ADDED THIS LINE
+                        child.castShadow = child.userData.castShadow && document.getElementById('shadowToggle').checked; // MODIFIED THIS LINE
+                        child.receiveShadow = true;
+                        if (!child.material || child.material.type === 'MeshBasicMaterial' || child.material.isMeshFaceMaterial) {
+                            child.material = new THREE.MeshStandardMaterial({
+                                color: 0xcccccc, metalness: 0.1, roughness: 0.8,
+                                envMap: this.scene.environment, envMapIntensity: 0.5,
+                                side: THREE.FrontSide 
+                            });
+                        } else {
+                            child.material.envMap = this.scene.environment;
+                            if(child.material.side !== THREE.FrontSide && !(child.material.userData && child.material.userData.sideSetByUser)) { 
+                                child.material.side = THREE.FrontSide; 
+                            }
+                            child.material.needsUpdate = true;
+                        }
+                    }
+                });
+                        newLoadedObjectGroup = loadedObject;
+                        resolve();
+                    }, (error) => {
+                        if (parseSucceededOnce) {
+                             // console.warn('Rhino3dmLoader.parse errored after a successful call:', error);
+                             return;
+                        }
+                        console.error('Failed to parse 3dm buffer:', error);
+                        reject(error);
+                    });
+                });
+            } catch (error) {
+                console.error("Error during Rhino geometry parsing stage:", error);
+                this.updateObjectInspector();
+                return;
+            }
+
+            if (!newLoadedObjectGroup) {
+                // console.warn("No new object group was created from parsing. Aborting update.");
+                this.updateObjectInspector();
+                return;
+            }
+
+            // --- Stage 2: Cleanup old Rhino.Compute objects from scene and map ---
+            const oldRcRootObjectsToRemove = [];
+            this.scene.traverse(sceneChild => {
+                if (sceneChild.userData && sceneChild.userData.isRhinoCompute && sceneChild !== newLoadedObjectGroup) {
+                    oldRcRootObjectsToRemove.push(sceneChild);
+                }
+            });
+
+            oldRcRootObjectsToRemove.forEach(rootObj => {
+                this.scene.remove(rootObj); // Remove from scene
+                // Dispose geometry and materials
+                rootObj.traverse(subChild => {
+                    if (subChild.isMesh) {
+                        if (subChild.geometry) subChild.geometry.dispose();
+                        if (subChild.material) {
+                            if (Array.isArray(subChild.material)) {
+                                subChild.material.forEach(m => { if (m.dispose) m.dispose(); });
+                            } else if (subChild.material.dispose) {
+                                subChild.material.dispose();
+                            }
+                        }
+                    }
+                });
+            });
+
+            const keysToDeleteFromMap = [];
+            for (const id of this.meshObjects.keys()) {
+                if (id.startsWith('rc_mesh_')) {
+                     keysToDeleteFromMap.push(id);
+                }
+            }
+            keysToDeleteFromMap.forEach(id => this.meshObjects.delete(id));
+
+
+            // --- Stage 3: Add new object to scene and update map ---
+            this.scene.add(newLoadedObjectGroup); // Add the fully prepared new group
+
+            let meshesAddedToMapCount = 0;
+            newLoadedObjectGroup.traverse(child => {
+                if (child.isMesh) {
+                    const meshId = `rc_mesh_${child.uuid}`; // Use UUID for robustness
+                    this.meshObjects.set(meshId, child);
+                    meshesAddedToMapCount++;
+                    // console.log(`Added/Updated THREE.Mesh in scene map with ID: ${meshId}`);
+                }
+            });
+
+            // Handle default scene removal
+            if (meshesAddedToMapCount > 0) {
+                this.removeDefaultScene(); 
+            }
+
+            const currentRcMeshCount = Array.from(this.meshObjects.keys()).filter(id => id.startsWith('rc_mesh_')).length;
+            document.getElementById('meshCount').textContent = currentRcMeshCount;
+            this.updateObjectInspector();
+            // console.log(`Final RC mesh count in scene map: ${currentRcMeshCount}`);
+        }
+// rhinocompute geos - mesh only
+            
+            // --- Direct Mode (Flatbuffers) ---
+            updateControls(sceneData) {
+                if (this.operatingMode === 'rhinoCompute') return; 
+
+                const panelContainer = document.getElementById('controls-panel-container');
+                const container = document.getElementById('controls-panel');
+                const hasControls = sceneData.controlsLength() > 0;
+                
+                panelContainer.style.display = hasControls ? 'flex' : 'none';
+                if (!hasControls) {
+                    document.getElementById('controlCount').textContent = 0;
+                    return;
+                }
+
+                if (container.childElementCount !== sceneData.controlsLength()) {
+                    container.innerHTML = '';
+                    for (let i = 0; i < sceneData.controlsLength(); i++) {
+                        const html = this.getControlHtml(sceneData.controls(i));
+                        if (html) container.insertAdjacentHTML('beforeend', html);
+                    }
+                    this.attachEventListeners();
+                } 
+                else if (!this.isInteracting) {
+                    for (let i = 0; i < sceneData.controlsLength(); i++) {
+                        const controlWrapper = sceneData.controls(i);
+                        const controlType = controlWrapper.dataType();
+                        let controlData;
+
+                        switch (controlType) {
+                            case MeshStream.ControlData.Slider:
+                                controlData = controlWrapper.data(new MeshStream.Slider());
+                                const slider = document.getElementById(controlData.id());
+                                if (slider) {
+                                    const valueSpan = document.getElementById(`${slider.id}_val`);
+                                    slider.min = controlData.min(); slider.max = controlData.max(); slider.step = controlData.step();
+                                    slider.value = controlData.value();
+                                    if(valueSpan) valueSpan.textContent = controlData.value().toFixed(controlData.decimals());
+                                }
+                                break;
+                            case MeshStream.ControlData.Toggle:
+                                controlData = controlWrapper.data(new MeshStream.Toggle());
+                                const toggle = document.getElementById(controlData.id());
+                                if (toggle) toggle.checked = controlData.value();
+                                break;
+                            case MeshStream.ControlData.Button:
+                                controlData = controlWrapper.data(new MeshStream.Button());
+                                const button = document.getElementById(controlData.id());
+                                if (button && button.textContent !== controlData.name()) button.textContent = controlData.name();
+                                break;
+                        }
+                    }
+                }
+                document.getElementById('controlCount').textContent = sceneData.controlsLength();
+            }
+            
+			getControlHtml(controlWrapper){ const controlType = controlWrapper.dataType(); let controlData, html = ''; switch (controlType) { case MeshStream.ControlData.Slider: controlData = controlWrapper.data(new MeshStream.Slider()); html = `<div class="control-group"><label>${controlData.name()}</label><div class="slider-container"><input type="range" id="${controlData.id()}" class="ui-slider" min="${controlData.min()}" max="${controlData.max()}" value="${controlData.value()}" step="${controlData.step()}"><span id="${controlData.id()}_val" class="slider-value">${controlData.value().toFixed(controlData.decimals())}</span></div></div>`; break; case MeshStream.ControlData.Toggle: controlData = controlWrapper.data(new MeshStream.Toggle()); html = `<div class="control-group"><label>${controlData.name()}</label><div class="switch-container"><label class="switch"><input type="checkbox" id="${controlData.id()}" class="ui-toggle" ${controlData.value() ? "checked" : ""}><span class="slider-knob"></span></label></div></div>`; break; case MeshStream.ControlData.Button: controlData = controlWrapper.data(new MeshStream.Button()); html = `<div class="control-group"><button id="${controlData.id()}" class="ui-button">${controlData.name()}</button></div>`; break; } return html; }
+            
+            attachEventListeners(){ 
+                document.querySelectorAll('.ui-slider').forEach(slider => { 
+                    const valueSpan = slider.nextElementSibling;
+                    const decimals = valueSpan.dataset.decimals || (valueSpan.innerText.includes('.') ? valueSpan.innerText.split('.')[1].length : 0);
+                    slider.addEventListener('mousedown', () => { this.isInteracting = true; }); 
+                    slider.addEventListener('mouseup', () => { this.isInteracting = false; }); 
+                    slider.addEventListener('input', () => { 
+                        valueSpan.textContent = parseFloat(slider.value).toFixed(decimals);
+                        this.handleControlChange('slider', slider.id, parseFloat(slider.value));
+                    }); 
+                }); 
+                document.querySelectorAll('.ui-toggle').forEach(toggle => { 
+                    toggle.addEventListener('change', () => this.handleControlChange('toggle', toggle.id, toggle.checked)); 
+                }); 
+                document.querySelectorAll('.ui-button').forEach(button => { 
+                    button.addEventListener('click', () => this.handleControlChange('button', button.id, true)); 
+                });
+                document.querySelectorAll('.ui-text').forEach(input => {
+                    input.addEventListener('input', () => this.handleControlChange('text', input.id, input.value));
+                });
+            }
+
+            handleControlChange(type, id, value) {
+                if (this.operatingMode === 'rhinoCompute') {
+                    this.triggerRhinoCompute();
+                } else { // Direct mode
+                    if (type === 'slider') { // Throttle slider
+                        clearTimeout(this.throttleTimer);
+                        this.throttleTimer = setTimeout(() => this.sendMessage(type, id, value), this.throttleDelay);
+                    } else {
+                        this.sendMessage(type, id, value);
+                    }
+                }
+            }
+            
+                    loadHDREnvironment(url) {
+        // const hdrRotationSlider = document.getElementById('hdrRotationSlider'); // REMOVE
+        // const hdrRotationGroup = hdrRotationSlider ? hdrRotationSlider.closest('.info-group') : null; // REMOVE
+
+        const onEnvLoad = (texture) => {
+            texture.mapping = THREE.EquirectangularReflectionMapping;
+            texture.center.set(0.5, 0.5); // Keep this for default mapping if desired
+            this.scene.environment = texture; 
+            this.scene.userData.originalBackground = texture;
+
+            this.scene.traverse(obj => {
+                if (obj.isMesh && (obj.material?.isMeshPhysicalMaterial || obj.material?.isMeshStandardMaterial)) {
+                    obj.material.envMap = texture;
+                    obj.material.needsUpdate = true;
+                }
+            });
+            if (this.backgroundDiv) this.backgroundDiv.style.background = 'transparent';
+            
+            // if (hdrRotationSlider) hdrRotationSlider.disabled = false; // REMOVE
+            // if (hdrRotationGroup) hdrRotationGroup.style.opacity = '1'; // REMOVE
+
+            this.updateLighting(); 
+        };
+        if (!url || url === 'null') {
+            this.scene.environment = null;
+            this.scene.userData.originalBackground = null;
+            this.scene.traverse(obj => {
+                if (obj.isMesh && (obj.material?.isMeshPhysicalMaterial || obj.material?.isMeshStandardMaterial)) {
+                    obj.material.envMap = null;
+                    obj.material.needsUpdate = true;
+                }
+            });
+            if (this.backgroundDiv) this.backgroundDiv.style.background = '#1a252f';
+            
+            // if (hdrRotationSlider) hdrRotationSlider.disabled = true; // REMOVE
+            // if (hdrRotationGroup) hdrRotationGroup.style.opacity = '0.5'; // REMOVE
+            
+            this.updateLighting();
+        } else {
+            this.rgbeLoader.load(url, onEnvLoad, undefined, (e) => console.error('Error loading HDR:', e));
+        }
+    }
+            
+            
+            initScene() {
+                this.scene = new THREE.Scene();
+                this.scene.backgroundIntensity = 1.0;
+
+                const aspect = window.innerWidth / window.innerHeight;
+                this.camera = new THREE.PerspectiveCamera(50, aspect, 0.1, 10000);
+                this.camera.position.set(20, 20, 20);
+
+                this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer.setClearColor(0x000000, 0);
+                this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+                this.renderer.toneMappingExposure = 1;
+                this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+                this.renderer.shadowMap.enabled = true;
+                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                document.getElementById('viewer').appendChild(this.renderer.domElement);
+                document.getElementById('viewer').addEventListener('click', (event) => this.onObjectClick(event));
+                this.backgroundDiv = document.createElement('div');
+                this.backgroundDiv.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;background:#1a252f;z-index:-1;';
+                document.body.insertBefore(this.backgroundDiv, document.body.firstChild);
+                this.ambientLight = new THREE.AmbientLight(0xFFFFFF, 0.1);
+                this.scene.add(this.ambientLight);
+                this.defaultLight1 = new THREE.DirectionalLight(0xffffff, 0.8); this.defaultLight1.position.set(20, 30, 15); this.defaultLight1.visible = false; this.scene.add(this.defaultLight1);
+                this.defaultLight2 = new THREE.DirectionalLight(0xffffff, 0.5); this.defaultLight2.position.set(-20, 30, -15); this.defaultLight2.visible = false; this.scene.add(this.defaultLight2);
+                this.sunLight = new THREE.DirectionalLight(0xffffff, 1.5); this.sunLight.castShadow = true;
+                this.sunLight.shadow.camera.left = -100; this.sunLight.shadow.camera.right = 100; this.sunLight.shadow.camera.top = 100; this.sunLight.shadow.camera.bottom = -100;
+                this.sunLight.shadow.camera.near = 0.5; this.sunLight.shadow.camera.far = 200; this.sunLight.shadow.mapSize.width = 2048; this.sunLight.shadow.mapSize.height = 2048;
+                this.scene.add(this.sunLight);
+                
+                this.customSpotlight = new THREE.SpotLight(0xffffff, 15, 200, 20 * (Math.PI / 180), 0.5, 2);
+                this.customSpotlight.position.set(0, 10, 0);
+                this.customSpotlight.castShadow = true;
+                this.customSpotlight.shadow.mapSize.width = 2048;
+                this.customSpotlight.shadow.mapSize.height = 2048;
+                this.customSpotlight.shadow.bias = -0.0005;
+                this.scene.add(this.customSpotlight);
+                this.scene.add(this.customSpotlight.target);
+                
+                this.customFillLight = new THREE.PointLight(0x707070, 0.2, 200);
+                this.customFillLight.position.set(0, 5, 0);
+                this.scene.add(this.customFillLight);
+                
+                this.spotLightHelper = new THREE.SpotLightHelper(this.customSpotlight);
+                this.spotLightHelper.visible = false;
+                this.scene.add(this.spotLightHelper);
+
+                this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+                this.controls.addEventListener('change', () => this.updateCameraPanel());
+                const groundGeometry = new THREE.PlaneGeometry(200, 200);
+                this.visibleGroundMaterial = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.5, metalness: 0.5, flatShading: false });
+                this.shadowCatcherMaterial = new THREE.ShadowMaterial({ opacity: 0.4 });
+                this.groundPlane = new THREE.Mesh(groundGeometry, this.visibleGroundMaterial);
+                this.groundPlane.name = "Ground Plane";
+                this.groundPlane.rotation.x = -Math.PI / 2; this.groundPlane.position.y = -0.01; this.groundPlane.receiveShadow = true; 
+                this.scene.add(this.groundPlane);
+                
+                this.meshObjects.set('ground_plane', this.groundPlane);
+
+                this.gridHelper = new THREE.GridHelper(100, 20, 0x888888, 0x444444); this.gridHelper.visible = false; this.scene.add(this.gridHelper);
+                
+                this.sunPathVisualizer = new SunPathVisualizer(this.scene, this.sunLight);
+                this.initPostprocessing();
+                this.setupSceneEventListeners();
+                this.createDefaultScene();
+                this.updateObjectInspector();
+                window.addEventListener('resize', () => this.onWindowResize());
+                this.animate();
+            }
+            
+            createDefaultScene() {
+                document.getElementById('gridToggle').checked = true;
+                document.getElementById('gridToggle').dispatchEvent(new Event('change'));
+                
+                document.getElementById('groundToggle').checked = false;
+                document.getElementById('groundToggle').dispatchEvent(new Event('change'));
+
+                document.getElementById('modeSun').checked = true;
+                document.querySelector('input[name="lightingMode"]').dispatchEvent(new Event('change'));
+                
+                document.getElementById('shadowToggle').checked = true;
+                document.getElementById('shadowToggle').dispatchEvent(new Event('change'));
+                
+                document.getElementById('backgroundIntensitySlider').value = 0.5;
+                document.getElementById('backgroundIntensitySlider').dispatchEvent(new Event('input'));
+
+
+                const geometry = new THREE.BoxGeometry(5, 5, 5);
+                const material = new THREE.MeshStandardMaterial({ color: 0x007bff, roughness: 0.2, metalness: 0.1, flatShading: false });
+                this.defaultCube = new THREE.Mesh(geometry, material);
+                this.defaultCube.position.set(0, 2.5, 0);
+                this.defaultCube.castShadow = true;
+                this.defaultCube.name = "WelcomeCube";
+                this.scene.add(this.defaultCube);
+            }
+
+            removeDefaultScene() {
+                if (this.defaultCube) {
+                    this.scene.remove(this.defaultCube);
+                    this.defaultCube.geometry.dispose();
+                    this.defaultCube.material.dispose();
+                    this.defaultCube = null;
+                }
+            }
+
+            onObjectClick(event) {
+                if (!document.getElementById('inspector-highlight-toggle').checked) return;
+
+                const mouse = new THREE.Vector2();
+                const rect = this.renderer.domElement.getBoundingClientRect();
+                mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+                mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+                const raycaster = new THREE.Raycaster();
+                raycaster.setFromCamera(mouse, this.camera);
+                const objectsToIntersect = Array.from(this.meshObjects.values());
+                if (objectsToIntersect.length === 0) return;
+                const intersects = raycaster.intersectObjects(objectsToIntersect);
+
+                if (intersects.length > 0) {
+                    const clickedObject = intersects[0].object;
+                    let foundId = null;
+                    for (const [id, mesh] of this.meshObjects.entries()) {
+                        if (mesh === clickedObject) {
+                            foundId = id;
+                            break;
+                        }
+                    }
+                    if (foundId) {
+                        document.querySelector('.tab-button[data-panel="object-inspector-container"]').click();
+                        document.getElementById('object-select').value = foundId;
+                        this.selectedObjectId = foundId;
+                        this.populateInspector(foundId);
+                    }
+                }
+            }
+
+            initPostprocessing() {
+                this.composer = new EffectComposer(this.renderer);
+                const renderPass = new RenderPass(this.scene, this.camera);
+                this.composer.addPass(renderPass);
+                
+                this.outlinePass = new OutlinePass(new THREE.Vector2(window.innerWidth, window.innerHeight), this.scene, this.camera);
+                this.outlinePass.edgeStrength = 5;
+                this.outlinePass.edgeGlow = 0.5;
+                this.outlinePass.edgeThickness = 1.5;
+                this.outlinePass.visibleEdgeColor.set('#00ffff');
+                this.outlinePass.hiddenEdgeColor.set('#00ffff');
+                this.outlinePass.enabled = false;
+                this.composer.addPass(this.outlinePass);
+
+                const outputPass = new OutputPass();
+                this.composer.addPass(outputPass);
+            }
+
+            updateSunPosition(altitude, azimuth) {
+                if (!this.sunLight) return;
+                const altRad = altitude * (Math.PI / 180);
+                const azRad = azimuth * (Math.PI / 180);
+                const dist = 100;
+                const x = dist * Math.cos(altRad) * Math.sin(azRad);
+                const y = dist * Math.sin(altRad);
+                const z = -dist * Math.cos(altRad) * Math.cos(azRad);
+                this.sunLight.position.set(x, y, z);
+            }
+
+            updateLighting() {
+                const mode = document.querySelector('input[name="lightingMode"]:checked').value;
+                const useCustom = mode === 'custom';
+                const dollySlider = document.getElementById('dolly-zoom-slider');
+                const isOrthoLike = dollySlider && dollySlider.value > 95;
+                
+                this.sunLight.visible = (mode === 'sun');
+                this.defaultLight1.visible = (mode === 'default');
+                this.defaultLight2.visible = (mode === 'default');
+                this.customSpotlight.visible = useCustom;
+                this.customFillLight.visible = useCustom;
+                
+                this.scene.background = (useCustom || isOrthoLike) ? null : this.scene.userData.originalBackground;
+                
+                document.getElementById('sun-controls').style.display = (mode === 'sun') ? 'block' : 'none';
+                document.getElementById('default-light-controls').style.display = (mode === 'default') ? 'block' : 'none';
+                document.getElementById('custom-light-controls').style.display = useCustom ? 'block' : 'none';
+
+                if (mode === 'sun') {
+                    const sunPathIsActive = document.getElementById('sunPathToggle').checked;
+                    document.getElementById('sunAltitudeSlider').disabled = sunPathIsActive;
+                    document.getElementById('sunAzimuthSlider').disabled = sunPathIsActive;
+                }
+                
+                if (useCustom) {
+                    this.customSpotlight.intensity = parseFloat(document.getElementById('spotlight-intensity').value);
+                    this.customFillLight.intensity = this.customSpotlight.intensity * 0.2;
+                    
+                    const darkness = parseFloat(document.getElementById('spotlight-shadow-darkness').value);
+                    this.ambientLight.intensity = 0.8 * (1.0 - darkness);
+                } else {
+                    this.ambientLight.intensity = 0.5;
+                }
+                
+                if (mode === 'default') {
+                    const intensity = parseFloat(document.getElementById('defaultLightIntensitySlider').value);
+                    this.defaultLight1.intensity = intensity;
+                    this.defaultLight2.intensity = intensity * 0.6;
+                }
+            }
+            
+            setupSceneEventListeners() { 
+                document.getElementById('left-panel-wrapper').addEventListener('contextmenu', e => e.preventDefault());
+                document.getElementById('controls-panel-container').addEventListener('contextmenu', e => e.preventDefault());
+
+                // Mode switching listeners
+                document.getElementById('selectDirectModeBtn').addEventListener('click', () => this.handleModeChange('direct'));
+                document.getElementById('selectRCModeBtn').addEventListener('click', () => this.handleModeChange('rhinoCompute'));
+
+                document.getElementById('loadGhBtn').addEventListener('click', () => this.handleLoadGhDefinition());
+                document.getElementById('resetModeBtn').addEventListener('click', () => this.resetToDirectMode());
+
+                // Direct mode connection
+                document.getElementById('directConnectBtn').addEventListener('click', () => { 
+                    if (this.websocket && this.websocket.readyState === WebSocket.OPEN) this.disconnect(); 
+                    else this.connect(document.getElementById('wsUrl').value); 
+                }); 
+                
+                document.getElementById('exportGltfBtn').addEventListener('click', () => this.exportGLTF());
+                document.getElementById('saveSceneBtn').addEventListener('click', () => this.saveSceneState());
+                document.getElementById('loadSceneBtn').addEventListener('click', () => document.getElementById('loadSceneInput').click());
+                document.getElementById('loadSceneInput').addEventListener('change', (e) => this.loadSceneState(e));
+                
+                document.getElementById('hdr-select').addEventListener('change', (e) => {
+                    const localSelect = document.getElementById('local-hdr-select');
+                    if (localSelect) localSelect.value = '';
+                    this.loadHDREnvironment(e.target.value);
+                });
+
+                document.getElementById('backgroundIntensitySlider').addEventListener('input', (e) => {
+                    document.getElementById('backgroundIntensityValue').textContent = parseFloat(e.target.value).toFixed(1);
+                    this.scene.backgroundIntensity = parseFloat(e.target.value);
+                });
+                document.getElementById('sceneExposureSlider').addEventListener('input', (e) => {
+                    document.getElementById('sceneExposureValue').textContent = parseFloat(e.target.value).toFixed(1);
+                    this.renderer.toneMappingExposure = parseFloat(e.target.value);
+                });
+
+                document.querySelectorAll('input[name="lightingMode"]').forEach(radio => radio.addEventListener('change', () => this.updateLighting()));
+                
+                document.getElementById('defaultLightIntensitySlider').addEventListener('input', (e) => {
+                    document.getElementById('defaultLightIntensityValue').textContent = parseFloat(e.target.value).toFixed(1);
+                    this.updateLighting();
+                });
+
+                const shadowToggle = document.getElementById('shadowToggle');
+                const gridToggle = document.getElementById('gridToggle');
+                const groundToggle = document.getElementById('groundToggle');
+
+                const updateGroundState = () => {
+                    const groundIsOn = groundToggle.checked;
+                    const shadowsAreOn = shadowToggle.checked;
+                    if (groundIsOn) {
+                        this.groundPlane.material = this.visibleGroundMaterial;
+                        this.groundPlane.visible = true;
+                    } else {
+                        if (shadowsAreOn) {
+                            this.groundPlane.material = this.shadowCatcherMaterial;
+                            this.groundPlane.visible = true;
+                        } else {
+                            this.groundPlane.visible = false;
+                        }
+                    }
+                    if (this.selectedObjectId === 'ground_plane') this.populateInspector('ground_plane');
+                }
+
+                groundToggle.addEventListener('change', updateGroundState);
+                
+                shadowToggle.addEventListener('change', () => {
+            const isEnabled = shadowToggle.checked;
+            this.renderer.shadowMap.enabled = isEnabled;
+            this.sunLight.castShadow = isEnabled;
+            this.customSpotlight.castShadow = isEnabled;
+            this.meshObjects.forEach((mesh, id) => {
+                if (id !== 'ground_plane') {
+                    // MODIFIED BLOCK START
+                    const objectShouldCastShadows = (mesh.userData.castShadow === undefined) ? true : mesh.userData.castShadow;
+                    mesh.castShadow = objectShouldCastShadows && isEnabled;
+                    // MODIFIED BLOCK END
+                }
+            });
+            if(this.defaultCube) this.defaultCube.castShadow = isEnabled;
+            this.scene.traverse((o) => { if (o.material) o.material.needsUpdate = true; });
+            updateGroundState();
+        });
+
+                gridToggle.addEventListener('change', () => {
+                    if (this.gridHelper) this.gridHelper.visible = gridToggle.checked;
+                });
+                document.getElementById('spotlightHelperToggle').addEventListener('change', (e) => {
+                    if (this.spotLightHelper) this.spotLightHelper.visible = e.target.checked;
+                });
+                
+                ['spotlight-pos-x', 'spotlight-pos-y', 'spotlight-pos-z'].forEach(id => {
+                    document.getElementById(id).addEventListener('input', () => this.updateSpotlightPosition());
+                });
+                document.getElementById('spotlight-color').addEventListener('input', (e) => {
+                    this.customSpotlight.color.set(e.target.value);
+                });
+                document.getElementById('spotlight-intensity').addEventListener('input', () => this.updateLighting());
+                document.getElementById('spotlight-angle').addEventListener('input', (e) => {
+                    const angleDegrees = parseFloat(e.target.value);
+                    this.customSpotlight.angle = angleDegrees * (Math.PI / 180);
+                });
+                document.getElementById('spotlight-softness').addEventListener('input', (e) => {
+                    this.customSpotlight.penumbra = parseFloat(e.target.value);
+                });
+                document.getElementById('spotlight-shadow-darkness').addEventListener('input', () => this.updateLighting());
+
+                const sunAltitudeSlider = document.getElementById('sunAltitudeSlider');
+                const sunAltitudeValue = document.getElementById('sunAltitudeValue');
+                const sunAzimuthSlider = document.getElementById('sunAzimuthSlider');
+                const sunAzimuthValue = document.getElementById('sunAzimuthValue');
+                const handleSunUpdate = () => {
+                    const sunPathIsActive = document.getElementById('sunPathToggle').checked;
+                    if (sunPathIsActive) return;
+                    const altitude = parseFloat(sunAltitudeSlider.value);
+                    const azimuth = parseFloat(sunAzimuthSlider.value);
+                    sunAltitudeValue.textContent = `${altitude}°`;
+                    sunAzimuthValue.textContent = `${azimuth}°`;
+                    this.updateSunPosition(altitude, azimuth);
+                };
+                sunAltitudeSlider.addEventListener('input', handleSunUpdate);
+                sunAzimuthSlider.addEventListener('input', handleSunUpdate);
+                
+                const dollyZoomSlider = document.getElementById('dolly-zoom-slider');
+                const cameraModeToggle = document.getElementById('camera-mode-toggle');
+
+                const performDollyZoom = (newFov) => {
+                    const viewHeight = this.dollyZoomState.lockedViewHeight;
+                    if (viewHeight === null) return;
+                    
+                    const newFovRad = THREE.MathUtils.degToRad(newFov);
+                    const newDistance = viewHeight / (2 * Math.tan(newFovRad / 2));
+                    const direction = this.camera.position.clone().sub(this.controls.target).normalize();
+                    
+                    this.camera.position.copy(this.controls.target).add(direction.multiplyScalar(newDistance));
+                    this.camera.fov = newFov;
+                    this.camera.updateProjectionMatrix();
+                    this.updateCameraPanel();
+                }
+
+                dollyZoomSlider.addEventListener('mousedown', () => {
+                    const distance = this.camera.position.distanceTo(this.controls.target);
+                    const fovRad = THREE.MathUtils.degToRad(this.camera.fov);
+                    this.dollyZoomState.lockedViewHeight = 2 * distance * Math.tan(fovRad / 2);
+                });
+                dollyZoomSlider.addEventListener('input', () => {
+                    const sliderValue = parseFloat(dollyZoomSlider.value);
+                    const newFov = 75 - (sliderValue / 100) * (75 - 5);
+                    performDollyZoom(newFov);
+                });
+                 dollyZoomSlider.addEventListener('mouseup', () => {
+                    this.dollyZoomState.lockedViewHeight = null;
+                });
+                
+                cameraModeToggle.addEventListener('change', (e) => {
+                    const isOrtho = e.target.checked;
+                    dollyZoomSlider.disabled = isOrtho;
+                    let targetSliderValue;
+                    if (isOrtho) {
+                        targetSliderValue = 100;
+                    } else {
+                        const targetFov = 50;
+                        targetSliderValue = 100 * (75 - targetFov) / (75 - 5);
+                    }
+                    dollyZoomSlider.value = targetSliderValue;
+                    dollyZoomSlider.dispatchEvent(new Event('mousedown'));
+                    dollyZoomSlider.dispatchEvent(new Event('input'));
+                    dollyZoomSlider.dispatchEvent(new Event('mouseup'));
+                    
+                    this.updateLighting();
+                });
+
+                ['cam-pos-x', 'cam-pos-y', 'cam-pos-z'].forEach(id => document.getElementById(id).addEventListener('input', () => this.updateCameraTransform()));
+                ['cam-target-x', 'cam-target-y', 'cam-target-z'].forEach(id => document.getElementById(id).addEventListener('input', () => this.updateCameraTransform()));
+                document.getElementById('zoomExtentsBtn').addEventListener('click', () => {
+                    this.zoomExtents();
+                    if (cameraModeToggle.checked) {
+                        cameraModeToggle.checked = false;
+                        cameraModeToggle.dispatchEvent(new Event('change'));
+                    }
+                });
+
+                const setupLatLonSync = (sliderId, numberId) => {
+                    const slider = document.getElementById(sliderId);
+                    const numberInput = document.getElementById(numberId);
+                    slider.addEventListener('input', () => {
+                        numberInput.value = slider.value;
+                        this.updateSunPath();
+                    });
+                    numberInput.addEventListener('input', () => {
+                        slider.value = numberInput.value;
+                        this.updateSunPath();
+                    });
+                };
+                setupLatLonSync('latitudeSlider', 'latitudeNumber');
+                setupLatLonSync('longitudeSlider', 'longitudeNumber');
+                document.getElementById('timeOfDaySlider').addEventListener('input', () => this.updateSunPath());
+                document.getElementById('dateInput').addEventListener('change', () => this.updateSunPath());
+                document.getElementById('sunPathToggle').addEventListener('change', (e) => {
+                    this.sunPathVisualizer.setVisible(e.target.checked);
+                    this.updateSunPath();
+                    this.updateLighting();
+                });
+                
+                document.querySelectorAll('.tab-button').forEach(button => {
+                    button.addEventListener('click', (e) => {
+                        const targetPanelId = e.currentTarget.dataset.panel;
+                        document.querySelectorAll('#left-panel-tabs .tab-button').forEach(btn => btn.classList.remove('active'));
+                        document.querySelectorAll('#left-panel-content-container .panel-container').forEach(panel => panel.classList.remove('active'));
+                        
+                        e.currentTarget.classList.add('active');
+                        document.getElementById(targetPanelId).classList.add('active');
+
+                        this.updateHighlightState();
+                    });
+                });
+                document.getElementById('panel-toggle-button').addEventListener('click', (e) => {
+                    document.getElementById('left-panel-wrapper').classList.toggle('collapsed');
+                });
+                document.getElementById('controls-panel-container').querySelector('.panel-title').addEventListener('click', (e) => {
+                    e.currentTarget.parentElement.classList.toggle('collapsed');
+                });
+
+                this.setupObjectInspectorListeners();
+                handleSunUpdate();
+                this.updateLighting();
+                this.updateSunPath();
+                this.updateCameraPanel();
+                this.updateSpotlightPosition();
+            }
+
+            updateSpotlightPosition() {
+                const x = parseFloat(document.getElementById('spotlight-pos-x').value);
+                const y = parseFloat(document.getElementById('spotlight-pos-y').value);
+                const z = parseFloat(document.getElementById('spotlight-pos-z').value);
+                this.customSpotlight.position.set(x, y, z);
+                this.customFillLight.position.set(-x/2, y/2, -z/2);
+            }
+
+            updateCameraTransform() {
+                const posX = parseFloat(document.getElementById('cam-pos-x').value);
+                const posY = parseFloat(document.getElementById('cam-pos-y').value);
+                const posZ = parseFloat(document.getElementById('cam-pos-z').value);
+                const targetX = parseFloat(document.getElementById('cam-target-x').value);
+                const targetY = parseFloat(document.getElementById('cam-target-y').value);
+                const targetZ = parseFloat(document.getElementById('cam-target-z').value);
+                this.camera.position.set(posX, posY, posZ);
+                this.controls.target.set(targetX, targetY, targetZ);
+            }
+
+            updateCameraPanel() {
+                document.getElementById('dolly-zoom-fov').textContent = `${this.camera.fov.toFixed(1)}°`;
+                document.getElementById('cam-pos-x').value = this.camera.position.x.toFixed(2);
+                document.getElementById('cam-pos-y').value = this.camera.position.y.toFixed(2);
+                document.getElementById('cam-pos-z').value = this.camera.position.z.toFixed(2);
+                document.getElementById('cam-target-x').value = this.controls.target.x.toFixed(2);
+                document.getElementById('cam-target-y').value = this.controls.target.y.toFixed(2);
+                document.getElementById('cam-target-z').value = this.controls.target.z.toFixed(2);
+            }
+            
+            zoomExtents() {
+                const box = new THREE.Box3();
+                let hasObjects = false;
+
+                const streamMeshes = Array.from(this.meshObjects.entries())
+                                          .filter(([id, mesh]) => id !== 'ground_plane')
+                                          .map(([id, mesh]) => mesh);
+
+                let objectsToConsider = streamMeshes.length > 0 ? streamMeshes : (this.defaultCube ? [this.defaultCube] : []);
+
+                objectsToConsider.forEach(mesh => {
+                    if (mesh.visible && mesh.geometry.attributes.position.count > 0) {
+                        box.expandByObject(mesh);
+                        hasObjects = true;
+                    }
+                });
+
+                if (!hasObjects || box.isEmpty()) {
+                    this.controls.target.set(0, 0, 0);
+                    this.camera.position.set(20, 20, 20);
+                    this.controls.update();
+                    return;
+                }
+                
+                const center = new THREE.Vector3();
+                const size = new THREE.Vector3();
+                box.getCenter(center);
+                box.getSize(size);
+                const maxDim = Math.max(size.x, size.y, size.z);
+                
+                const fitHeightDistance = maxDim / (2 * Math.tan(this.camera.fov * Math.PI / 360));
+                const fitWidthDistance = fitHeightDistance / this.camera.aspect;
+                const distance = 1.2 * Math.max(fitHeightDistance, fitWidthDistance);
+                const direction = this.camera.position.clone().sub(this.controls.target).normalize();
+                
+                if (direction.lengthSq() === 0) {
+                    direction.set(1, 1, 1).normalize();
+                }
+                
+                this.controls.target.copy(center);
+                this.camera.position.copy(center).add(direction.multiplyScalar(distance));
+                this.camera.near = distance / 100;
+                this.camera.far = distance * 100;
+                
+                this.camera.updateProjectionMatrix();
+                this.controls.update();
+                this.updateCameraPanel();
+            }
+
+            updateSunPath() {
+                const lat = parseFloat(document.getElementById('latitudeSlider').value);
+                const lon = parseFloat(document.getElementById('longitudeSlider').value);
+                const timeOfDay = parseFloat(document.getElementById('timeOfDaySlider').value);
+                const dateString = document.getElementById('dateInput').value;
+                const [year, month, day] = dateString.split('-').map(Number);
+                const date = new Date(Date.UTC(year, month - 1, day));
+                this.sunPathVisualizer.update(date, lat, lon, timeOfDay);
+                document.getElementById('timeOfDayValue').textContent = `${Math.floor(timeOfDay).toString().padStart(2, '0')}:${Math.round((timeOfDay % 1) * 60).toString().padStart(2, '0')}`;
+                const sunPathIsActive = document.getElementById('sunPathToggle').checked;
+                if (sunPathIsActive) {
+                    const currentDate = new Date(date);
+                    currentDate.setUTCHours(timeOfDay, (timeOfDay % 1) * 60);
+                    const currentPos = SunCalc.getPosition(currentDate, lat, lon);
+                    if (currentPos.altitude > 0) {
+                        const altitudeDeg = currentPos.altitude * 180 / Math.PI;
+                        let azimuthDeg = currentPos.azimuth * 180 / Math.PI + 180;
+                        if(azimuthDeg >= 360) azimuthDeg -= 360;
+                        document.getElementById('sunAltitudeSlider').value = altitudeDeg;
+                        document.getElementById('sunAzimuthSlider').value = azimuthDeg;
+                        document.getElementById('sunAltitudeValue').textContent = `${Math.round(altitudeDeg)}°`;
+                        document.getElementById('sunAzimuthValue').textContent = `${Math.round(azimuthDeg)}°`;
+                    }
+                }
+            }
+            
+            setupObjectInspectorListeners() {
+                document.getElementById('object-select').addEventListener('change', (e) => {
+                    this.selectedObjectId = e.target.value;
+                    this.populateInspector(this.selectedObjectId);
+                });
+                document.getElementById('inspector-highlight-toggle').addEventListener('change', () => this.updateHighlightState());
+                document.getElementById('inspector-visibility-toggle').addEventListener('change', (e) => {
+                     if (this.selectedObjectId) {
+                        const mesh = this.meshObjects.get(this.selectedObjectId);
+                        if (mesh) {
+                            mesh.visible = e.target.checked;
+                            if (this.selectedObjectId === 'ground_plane') {
+                                document.getElementById('groundToggle').checked = e.target.checked;
+                            }
+                        }
+                    }
+                });
+                document.getElementById('inspector-twosided-toggle').addEventListener('change', (e) => {
+                     if (this.selectedObjectId) {
+                        const mesh = this.meshObjects.get(this.selectedObjectId);
+                        if (mesh) {
+                            mesh.traverse(child => {
+                                if(child.isMesh && child.material) {
+                                    child.material.side = e.target.checked ? THREE.DoubleSide : THREE.FrontSide;
+                                    child.material.needsUpdate = true;
+                                }
+                            });
+                        }
+                    }
+                });
+                
+                const setupListener = (inputId, property, isColor = false) => {
+                    const inputElement = document.getElementById(inputId);
+                    if (!inputElement) return;
+
+                    inputElement.addEventListener('input', (e) => {
+                        if (!this.selectedObjectId) return;
+                        const mesh = this.meshObjects.get(this.selectedObjectId);
+                        if (!mesh) return;
+                        
+                        const value = isColor ? e.target.value : parseFloat(e.target.value);
+                        
+                        mesh.traverse(child => {
+                            if(child.isMesh && child.material && (child.material.isMeshPhysicalMaterial || child.material.isMeshStandardMaterial) ) {
+                                if (isColor) {
+                                    child.material.color.set(value);
+                                } else {
+                                    if (child.material[property] !== undefined) {
+                                        child.material[property] = value;
+                                    }
+                                }
+                                child.material.needsUpdate = true;
+                            }
+                        });
+                    });
+                };
+                
+                document.getElementById('material-preset').addEventListener('change', (e) => this.applyMaterialPreset(e.target.value));
+                
+                setupListener('inspector-color', 'color', true);
+                setupListener('inspector-metalness', 'metalness');
+                setupListener('inspector-roughness', 'roughness');
+                setupListener('inspector-opacity', 'opacity'); 
+                setupListener('inspector-envmap-intensity', 'envMapIntensity');
+                setupListener('inspector-transmission', 'transmission');
+                setupListener('inspector-ior', 'ior');
+                setupListener('inspector-thickness', 'thickness');
+                setupListener('inspector-clearcoat', 'clearcoat');
+                setupListener('inspector-clearcoat-roughness', 'clearcoatRoughness');
+                setupListener('inspector-iridescence', 'iridescence');
+                setupListener('inspector-iridescence-ior', 'iridescenceIOR');
+                setupListener('inspector-iridescence-thickness', 'iridescenceThicknessMax');
+            }
+            updateHighlightState() {
+                const inspectorTab = document.querySelector('.tab-button[data-panel="object-inspector-container"]');
+                const highlightIsOn = document.getElementById('inspector-highlight-toggle').checked;
+                
+                if (this.outlinePass) {
+                    this.outlinePass.enabled = highlightIsOn && inspectorTab.classList.contains('active');
+                }
+            }
+            applyMaterialPreset(presetName) {
+                if (!this.selectedObjectId) return;
+                const mesh = this.meshObjects.get(this.selectedObjectId);
+                if (!mesh) return;
+                
+                if(presetName === 'shadow_catcher') {
+                    mesh.material = this.shadowCatcherMaterial;
+                    if(this.selectedObjectId === 'ground_plane') {
+                        document.getElementById('groundToggle').checked = false;
+                    }
+                    this.populateInspector(this.selectedObjectId);
+                    return;
+                }
+                const presets = {
+                    standard: { metalness: 0.1, roughness: 0.8, transmission: 0.0, ior: 1.5, thickness: 0, clearcoat: 0.0, opacity: 1.0, envMapIntensity: 0.5 },
+                    glass: { color: "#FFFFFF", metalness: 0.0, roughness: 0.0, transmission: 1.0, ior: 1.5, thickness: 2.5, clearcoat: 1.0, opacity: 1.0, transparent: true, envMapIntensity: 1.0 },
+                    diamond: { color: "#FFFFFF", metalness: 0.0, roughness: 0.0, transmission: 1.0, ior: 2.418, thickness: 1.2, iridescence: 1.0, iridescenceIOR: 1.8, iridescenceThicknessRange: [100, 400], envMapIntensity: 1.0 },
+                    polished_metal: { metalness: 1.0, roughness: 0.08, transmission: 0.0, ior: 1.5, thickness: 0, clearcoat: 1.0, opacity: 1.0, envMapIntensity: 1.0 },
+                    jade: { color: "#3ba27a", metalness: 0.1, roughness: 0.2, transmission: 0.7, ior: 1.6, thickness: 2.0, clearcoat: 0.2, opacity: 1.0, transparent: true, envMapIntensity: 0.8 },
+                    velvet: { color: "#550000", metalness: 0.0, roughness: 0.9, transmission: 0.0, ior: 1.5, thickness: 0, clearcoat: 0.5, clearcoatRoughness: 0.5, opacity: 1.0, envMapIntensity: 0.3 },
+                };
+                const preset = presets[presetName] || presets['standard'];
+                const materialClass = (this.selectedObjectId === 'ground_plane') ? THREE.MeshStandardMaterial : THREE.MeshPhysicalMaterial;
+                const isRefractive = presetName === 'glass' || presetName === 'diamond';
+                mesh.traverse(child => {
+                    if (child.isMesh) {
+                        const oldMaterial = child.material;
+                        const newMaterial = new materialClass({flatShading: false});
+                        newMaterial.setValues(preset);
+                        newMaterial.userData = { preset: presetName };
+                        if (oldMaterial.color && !(oldMaterial instanceof THREE.ShadowMaterial)) newMaterial.color.copy(oldMaterial.color);
+                        newMaterial.envMap = this.scene.environment;
+                        if(newMaterial.envMap) newMaterial.envMap.mapping = isRefractive ? THREE.EquirectangularRefractionMapping : THREE.EquirectangularReflectionMapping;
+                        child.material = newMaterial;
+                        if(oldMaterial.dispose) oldMaterial.dispose();
+                        if (this.selectedObjectId === 'ground_plane') this.visibleGroundMaterial = newMaterial;
+                    }
+                });
+                this.populateInspector(this.selectedObjectId);
+            }
+            updateObjectInspector() {
+                const inspectorTab = document.getElementById('object-inspector-tab');
+                const select = document.getElementById('object-select');
+                const objects = Array.from(this.meshObjects.entries());
+                if (objects.length <= 1 && this.defaultCube === null) {
+                    inspectorTab.style.display = 'none';
+                    if (document.querySelector('.tab-button[data-panel="object-inspector-container"]').classList.contains('active')) {
+                        document.querySelector('.tab-button[data-panel="info-panel-container"]').click();
+                    }
+                    this.selectedObjectId = null; this.populateInspector(null); return;
+                }
+                inspectorTab.style.display = 'block';
+                const currentSelection = select.value;
+                const currentHighlight = document.getElementById('inspector-highlight-toggle').checked;
+                select.innerHTML = '<option value="">-- Select Object --</option>';
+                objects.forEach(([id, mesh]) => {
+                    const option = document.createElement('option');
+                    option.value = id; option.textContent = mesh.name || `Mesh ${id}`; select.appendChild(option);
+                });
+                if (this.meshObjects.has(currentSelection)) select.value = currentSelection;
+                else this.selectedObjectId = null;
+                document.getElementById('inspector-highlight-toggle').checked = currentHighlight;
+                this.populateInspector(this.selectedObjectId);
+            }
+            populateInspector(objectId) {
+                const details = document.getElementById('inspector-details');
+                const materialControls = document.getElementById('inspector-material-controls');
+                this.updateHighlightState();
+                if (this.outlinePass) this.outlinePass.selectedObjects = (objectId && this.meshObjects.has(objectId)) ? [this.meshObjects.get(objectId)] : [];
+                if (!objectId) { details.hidden = true; return; }
+                this.selectedObjectId = objectId;
+                const mesh = this.meshObjects.get(this.selectedObjectId);
+                if (!mesh) { details.hidden = true; return; }
+                document.getElementById('inspector-visibility-toggle').checked = mesh.visible;
+                let mat = mesh.material;
+                if (!mat) { details.hidden = true; return; }
+                document.getElementById('inspector-twosided-toggle').checked = (mat.side === THREE.DoubleSide);
+                document.getElementById('inspector-vertices').textContent = mesh.geometry.attributes.position.count;
+                document.getElementById('inspector-faces').textContent = mesh.geometry.index ? (mesh.geometry.index.count / 3) : (mesh.geometry.attributes.position.count / 3);
+                document.getElementById('inspector-volume').textContent = this.calculateMeshVolume(mesh).toFixed(4);
+                const presetDropdown = document.getElementById('material-preset');
+                if (mat instanceof THREE.ShadowMaterial) presetDropdown.value = 'shadow_catcher';
+                else presetDropdown.value = mat.userData.preset || 'standard';
+                const isEditableMaterial = mat.isMeshPhysicalMaterial || mat.isMeshStandardMaterial;
+                materialControls.style.display = isEditableMaterial ? 'block' : 'none';
+                if (isEditableMaterial) {
+                    document.getElementById('inspector-color').value = '#' + mat.color.getHexString();
+                    document.getElementById('inspector-metalness').value = mat.metalness;
+                    document.getElementById('inspector-roughness').value = mat.roughness;
+                }
+                const isPhysical = mat.isMeshPhysicalMaterial;
+                document.getElementById('physical-props').style.display = isPhysical ? 'block' : 'none';
+                document.getElementById('iridescence-props').style.display = isPhysical ? 'block' : 'none';
+                document.getElementById('coat-props').style.display = isPhysical ? 'block' : 'none';
+                if (isPhysical) {
+                    document.getElementById('inspector-opacity').value = mat.opacity;
+                    document.getElementById('inspector-envmap-intensity').value = mat.envMapIntensity;
+                    document.getElementById('inspector-transmission').value = mat.transmission;
+                    document.getElementById('inspector-ior').value = mat.ior;
+                    document.getElementById('inspector-thickness').value = mat.thickness;
+                    document.getElementById('inspector-clearcoat').value = mat.clearcoat;
+                    document.getElementById('inspector-clearcoat-roughness').value = mat.clearcoatRoughness;
+                    document.getElementById('inspector-iridescence').value = mat.iridescence;
+                    document.getElementById('inspector-iridescence-ior').value = mat.iridescenceIOR;
+                    document.getElementById('inspector-iridescence-thickness').value = mat.iridescenceThicknessRange ? mat.iridescenceThicknessRange[1] : 400;
+                }
+                details.hidden = false;
+            }
+            calculateMeshVolume(mesh) {
+                let totalVolume = 0;
+                mesh.traverse(child => {
+                    if (child.isMesh && child.geometry?.isBufferGeometry && child.geometry.index) {
+                        const geometry = child.geometry; const pos = geometry.attributes.position; const index = geometry.index; let volume = 0;
+                        const v1 = new THREE.Vector3(), v2 = new THREE.Vector3(), v3 = new THREE.Vector3();
+                        for (let i = 0; i < index.count; i += 3) {
+                            v1.fromBufferAttribute(pos, index.getX(i)); v2.fromBufferAttribute(pos, index.getX(i + 1)); v3.fromBufferAttribute(pos, index.getX(i + 2));
+                            child.localToWorld(v1); child.localToWorld(v2); child.localToWorld(v3);
+                            volume += v1.dot(v2.cross(v3));
+                        }
+                        totalVolume += volume;
+                    }
+                });
+                return Math.abs(totalVolume / 6.0);
+            }
+
+            connect(url) { 
+                if (!url || this.operatingMode === 'rhinoCompute') return;
+                this.updateStatus('connecting', 'Connecting...'); 
+                this.websocket = new WebSocket(url); this.websocket.binaryType = "blob"; 
+                this.websocket.onopen = () => {
+                    this.updateStatus('connected', 'Connected');
+                };
+                this.websocket.onclose = () => this.updateStatus('disconnected', 'Disconnected'); 
+                this.websocket.onerror = (err) => console.error("WebSocket Error:", err); 
+                this.websocket.onmessage = (event) => this.handleMessage(event); 
+            }
+            disconnect() { 
+                if (this.websocket) {
+                    this.websocket.close(); 
+                    this.websocket = null;
+                }
+                 this.updateStatus('disconnected', 'Disconnected');
+            }
+            updateStatus(state, text) { 
+                const statusEl = document.getElementById('status'); 
+                statusEl.className = `status ${state}`; 
+                statusEl.textContent = text; 
+                
+                const directBtn = document.getElementById('directConnectBtn');
+                
+                if (this.operatingMode === 'direct') {
+                    const isConnected = state === 'connected';
+                    if(directBtn) {
+                        directBtn.textContent = isConnected ? 'Disconnect' : 'Connect';
+                        directBtn.classList.toggle('disconnect-btn', isConnected);
+                        directBtn.classList.toggle('connect-btn', !isConnected);
+                    }
+                }
+            }
+            sendRawMessage(message) { if (this.websocket && this.websocket.readyState === WebSocket.OPEN) this.websocket.send(message); }
+            sendMessage(type, id, value) { this.sendRawMessage(JSON.stringify({ type, id, value })); }
+            
+            updateMeshes(sceneData) {
+                this.removeDefaultScene();
+                const receivedMeshIds = new Set();
+                const shadowsAreGloballyOn = document.getElementById('shadowToggle').checked;
+                const hasNewMeshes = sceneData.meshesLength() > 0;
+
+                for (let i = 0; i < sceneData.meshesLength(); i++) {
+                    const meshData = sceneData.meshes(i);
+                    const meshId = meshData.id();
+                    receivedMeshIds.add(meshId);
+                    const castShadow = meshData.castShadow();
+                    const vertices = new Float32Array(meshData.verticesLength() * 3);
+                    for (let j = 0; j < meshData.verticesLength(); j++) { const v = meshData.vertices(j); vertices[j * 3] = v.x(); vertices[j * 3 + 1] = v.y(); vertices[j * 3 + 2] = v.z(); }
+                    const indices = new Uint32Array(meshData.facesLength() * 3);
+                    for (let j = 0; j < meshData.facesLength(); j++) { const f = meshData.faces(j); indices[j * 3] = f.a(); indices[j * 3 + 1] = f.b(); indices[j * 3 + 2] = f.c(); }
+                    const geometry = new THREE.BufferGeometry();
+                    geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+                    geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+                    if (meshData.normalsLength() > 0) {
+                        const normals = new Float32Array(meshData.normalsLength() * 3);
+                        for (let j = 0; j < meshData.normalsLength(); j++) { const n = meshData.normals(j); normals[j*3] = n.x(); normals[j*3+1] = n.y(); normals[j*3+2] = n.z(); }
+                        geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+                    } else {
+                        geometry.computeVertexNormals();
+                    }
+                    geometry.computeBoundingBox();
+                    const box = geometry.boundingBox;
+                    const pos = geometry.attributes.position;
+                    const uvs = new Float32Array(pos.count * 2);
+                    if (box) {
+                        const size = box.getSize(new THREE.Vector3()); const [ dX, dY, dZ ] = [size.x, size.y, size.z];
+                        if (dZ < dX && dZ < dY) {
+                            for (let j=0; j < pos.count; j++) { uvs[j * 2] = (pos.getX(j) - box.min.x) / dX; uvs[j * 2 + 1] = (pos.getY(j) - box.min.y) / dY; }
+                        } else if (dY < dX && dY < dZ) {
+                             for (let j=0; j < pos.count; j++) { uvs[j * 2] = (pos.getX(j) - box.min.x) / dX; uvs[j * 2 + 1] = (pos.getZ(j) - box.min.z) / dZ; }
+                        } else {
+                            for (let j=0; j < pos.count; j++) { uvs[j * 2] = (pos.getY(j) - box.min.y) / dY; uvs[j * 2 + 1] = (pos.getZ(j) - box.min.z) / dZ; }
+                        }
+                    }
+                    geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+                    if (this.meshObjects.has(meshId)) {
+                        const existingMesh = this.meshObjects.get(meshId);
+                        existingMesh.geometry.dispose(); existingMesh.geometry = geometry;
+                        existingMesh.userData.castShadow = castShadow; existingMesh.castShadow = castShadow && shadowsAreGloballyOn;
+                        existingMesh.receiveShadow = true;
+                    } else {
+                        const material = new THREE.MeshPhysicalMaterial({
+                            color: 0xcccccc, metalness: 0.1, roughness: 0.8, flatShading: false,
+                            envMap: this.scene.environment, envMapIntensity: 0.5
+                        });
+                        material.userData = { preset: 'standard' };
+                        const threeMesh = new THREE.Mesh(geometry, material);
+                        threeMesh.name = meshData.name() || `Mesh ${i}`;
+                        threeMesh.userData.castShadow = castShadow; threeMesh.castShadow = castShadow && shadowsAreGloballyOn;
+                        threeMesh.receiveShadow = true;
+                        this.scene.add(threeMesh); this.meshObjects.set(meshId, threeMesh);
+                    }
+                }
+                const currentMeshIds = new Set(Array.from(this.meshObjects.keys()).filter(id => id !== 'ground_plane'));
+                receivedMeshIds.forEach(id => currentMeshIds.delete(id));
+                currentMeshIds.forEach(id => { 
+                     if (id === this.selectedObjectId) { this.selectedObjectId = null; this.populateInspector(null); }
+                    const mesh = this.meshObjects.get(id);
+                    this.scene.remove(mesh); mesh.geometry.dispose(); if(mesh.material.dispose) mesh.material.dispose();
+                    this.meshObjects.delete(id);
+                });
+                if (hasNewMeshes || this.meshObjects.size !== document.getElementById('object-select').options.length) {
+                    document.getElementById('meshCount').textContent = this.meshObjects.size - 1; 
+                    this.updateObjectInspector();
+                }
+            }
+
+            animate() {
+                requestAnimationFrame(() => this.animate());
+                this.controls.update();
+                if(this.spotLightHelper && this.spotLightHelper.visible) this.spotLightHelper.update();
+                if (this.composer) {
+                    this.composer.render();
+                }
+            }
+
+            onWindowResize() {
+                const aspect = window.innerWidth / window.innerHeight;
+                this.camera.aspect = aspect; this.camera.updateProjectionMatrix();
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                if (this.composer) this.composer.setSize(window.innerWidth, window.innerHeight);
+                this.updateCameraPanel();
+            }
+
+			handleMessage(event) {
+                document.getElementById('dataSize').textContent = `${(event.data.size / 1024).toFixed(1)} KB`;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const buffer = new Uint8Array(e.target.result);
+                        const byteBuffer = new flatbuffers.ByteBuffer(buffer);
+                        const message = MeshStream.Message.getRootAsMessage(byteBuffer);
+                        if (message.payloadType() === MeshStream.MessagePayloadType.Scene) {
+                            const sceneData = message.payload(new MeshStream.Scene());
+                            this.updateMeshes(sceneData);
+                            this.updateControls(sceneData);
+                        }
+                    } catch (err) { console.error("Failed to parse message:", err); }
+                };
+                reader.readAsArrayBuffer(event.data);
+            }
+            
+            exportGLTF() {
+                const meshesToExport = Array.from(this.meshObjects.values());
+                if (meshesToExport.length === 0) { console.warn("No meshes to export."); return; }
+                this.gltfExporter.parse( meshesToExport, (gltf) => {
+                         const blob = new Blob([gltf], { type: 'application/octet-stream' });
+                         const link = document.createElement('a');
+                         link.href = URL.createObjectURL(blob);
+                         link.download = 'scene.glb';
+                         link.click();
+                    }, (error) => { console.error('An error happened during parsing', error); },
+                    { binary: true, embedImages: true } 
+                );
+            }
+            saveSceneState() {
+                const state = { settings: [], materials: {}, camera: {}, scene: {} };
+                const controlPanelIds = [ 'hdr-select', 'local-hdr-select', 'backgroundIntensitySlider', 'sceneExposureSlider', 'defaultLightIntensitySlider', 'spotlight-pos-x', 'spotlight-pos-y', 'spotlight-pos-z', 'spotlight-color', 'spotlight-intensity', 'spotlight-angle', 'spotlight-softness', 'spotlight-shadow-darkness', 'sunAltitudeSlider', 'sunAzimuthSlider', 'shadowToggle', 'groundToggle', 'gridToggle', 'spotlightHelperToggle', 'camera-mode-toggle', 'dolly-zoom-slider', 'cam-pos-x', 'cam-pos-y', 'cam-pos-z', 'cam-target-x', 'cam-target-y', 'cam-target-z', 'sunPathToggle', 'latitudeSlider', 'longitudeSlider', 'latitudeNumber', 'longitudeNumber', 'dateInput', 'timeOfDaySlider', 'inspector-highlight-toggle' ];
+                controlPanelIds.forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) { state.settings.push({ id: id, value: el.type === 'checkbox' ? el.checked : el.value }); }
+                });
+                const lightingMode = document.querySelector('input[name="lightingMode"]:checked');
+                if (lightingMode) state.settings.push({ id: 'lightingMode', value: lightingMode.value });
+                state.scene.backgroundIntensity = this.scene.backgroundIntensity;
+                this.meshObjects.forEach((mesh, id) => {
+                    const mat = mesh.material;
+                    if (mat instanceof THREE.ShadowMaterial) { state.materials[id] = { preset: 'shadow_catcher' }; return; }
+                    const matData = { ...mat.userData };
+                    if (mat.isMeshPhysicalMaterial || mat.isMeshStandardMaterial) {
+                        matData.color = '#' + mat.color.getHexString();
+                        ['metalness', 'roughness', 'opacity', 'transmission', 'ior', 'thickness', 'clearcoat', 'clearcoatRoughness', 'iridescence', 'iridescenceIOR', 'iridescenceThicknessRange', 'envMapIntensity'].forEach(prop => {
+                            if (mat[prop] !== undefined) matData[prop] = mat[prop];
+                        });
+                    }
+                    state.materials[id] = matData;
+                });
+                state.camera = { position: this.camera.position.toArray(), target: this.controls.target.toArray(), fov: this.camera.fov };
+                let prefix = document.getElementById('sceneFileName').value.trim() || 'scene-settings';
+                const timestamp = new Date().toISOString().replace(/[-:.]/g, '').replace('T', '_').slice(0, 15);
+                const filename = `${prefix}_${timestamp}.json`;
+                const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob); a.download = filename; a.click(); URL.revokeObjectURL(a.href);
+            }
+            loadSceneState(event) {
+                const file = event.target.files[0]; if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const state = JSON.parse(e.target.result); this.applyState(state);
+                        const filename = file.name; const match = filename.match(/^(.*)_\d{8}_\d{6}\.json$/);
+                        document.getElementById('sceneFileName').value = match ? match[1] : filename.replace('.json', '');
+                    } catch (err) { console.error("Error parsing scene file:", err); }
+                };
+                reader.readAsText(file); event.target.value = null;
+            }
+            applyState(state) {
+                if (!state) return;
+                if (state.camera) {
+                    if (state.camera.fov) this.camera.fov = state.camera.fov;
+                    this.camera.position.fromArray(state.camera.position);
+                    this.controls.target.fromArray(state.camera.target);
+                    this.controls.update();
+                }
+                if (state.scene && state.scene.backgroundIntensity !== undefined) this.scene.backgroundIntensity = state.scene.backgroundIntensity;
+                if (state.settings) {
+                    state.settings.forEach(setting => {
+                        if (setting.id === 'lightingMode') {
+                            const el = document.querySelector(`input[name="lightingMode"][value="${setting.value}"]`);
+                            if (el) el.checked = true; return;
+                        }
+                        const el = document.getElementById(setting.id);
+                        if (el) {
+                            if (el.type === 'checkbox') el.checked = setting.value; else el.value = setting.value;
+                            if (el.id === 'dolly-zoom-slider') setTimeout(() => el.dispatchEvent(new Event('input', { 'bubbles': true })), 50);
+                            else { el.dispatchEvent(new Event('change', { 'bubbles': true })); el.dispatchEvent(new Event('input', { 'bubbles': true })); }
+                        }
+                    });
+                }
+                const originalSelection = this.selectedObjectId;
+                if (state.materials) {
+                    for (const meshId in state.materials) {
+                        const mesh = this.meshObjects.get(meshId); if (!mesh) continue;
+                        const savedMat = state.materials[meshId];
+                        this.selectedObjectId = meshId; this.applyMaterialPreset(savedMat.preset);
+                        mesh.traverse(child => {
+                            if(child.isMesh) {
+                                const newMat = child.material;
+                                if (newMat.isMeshPhysicalMaterial || newMat.isMeshStandardMaterial) {
+                                    Object.keys(savedMat).forEach(key => {
+                                        if (key === 'color') newMat.color.set(savedMat[key]);
+                                        else if (newMat[key] !== undefined) newMat[key] = savedMat[key];
+                                        else if (key in newMat.userData) newMat.userData[key] = savedMat[key];
+                                    });
+                                }
+                                newMat.needsUpdate = true;
+                            }
+                        });
+                    }
+                }
+                this.selectedObjectId = originalSelection;
+                this.populateInspector(this.selectedObjectId);
+                this.updateLighting(); 
+                this.updateSunPath(); 
+                this.updateCameraPanel();
+            }
+        }
+        
+        // Main execution block
+        document.addEventListener('DOMContentLoaded', async () => {
+            const today = new Date().toISOString().split('T')[0];
+
+            // Wait for rhino3dm to be loaded
+            const rhino = await window.rhino3dm();
+            
+            // Setup the Info Panel with Mode selection
+            document.getElementById('info-panel').innerHTML = `
+                <div class="mode-selector">
+                    <button id="selectDirectModeBtn" class="mode-select-btn active">Direct Connection</button>
+                    <button id="selectRCModeBtn" class="mode-select-btn">Rhino.Compute</button>
+                </div>
+
+                <div id="directModeContent" class="mode-content-area" style="display: block;">
+                    <div class="info-group">
+                        <input type="text" id="wsUrl" value="ws://localhost:8081" placeholder="ws://localhost:8081">
+                        <button id="directConnectBtn" class="connect-btn" style="margin-top: 5px;">Connect</button>
+                    </div>
+                </div>
+
+                <div id="rcModeContent" class="mode-content-area">
+                    <div id="rhinoComputeLoadArea">
+                        <div class="info-group">
+                            <input type="text" id="rhinoComputeUrl" value="http://localhost:5000" placeholder="Rhino.Compute Server URL">
+                            <input type="file" id="ghFileInput" accept=".gh,.ghx" style="margin-top: 5px;">
+                            <button id="loadGhBtn" class="connect-btn" style="margin-top: 5px;">Load GH Definition</button>
+                        </div>
+                    </div>
+                    <div id="rcControlArea" style="display: none;">
+                        <p style="font-size: 13px; color: #ccc; margin-top: 0; margin-bottom: 10px;">Definition loaded. Controls are now active.</p>
+                        <button id="resetModeBtn" style="background: #6c757d;">Reset Mode</button>
+                    </div>
+                </div>
+                
+                <hr class="inspector-separator">
+                <div class="info-group">
+                    <label>Status: <span id="status" class="status disconnected">Disconnected</span></label>
+                    <div class="stats">
+                        <div>Meshes: <span id="meshCount">0</span></div>
+                        <div>Controls: <span id="controlCount">0</span></div>
+                        <div>Data: <span id="dataSize">0 KB</span></div>
+                    </div>
+                </div>
+                <hr class="inspector-separator">
+                <div class="info-group">
+                    <label>Scene State</label>
+                    <input type="text" id="sceneFileName" placeholder="Enter filename prefix..." style="margin-bottom: 5px;">
+                    <div style="display: flex; gap: 5px; margin-bottom: 5px;">
+                        <button id="saveSceneBtn" style="flex:1;">Save JSON</button>
+                        <button id="loadSceneBtn" style="flex:1;">Load JSON</button>
+                    </div>
+                    <button id="exportGltfBtn" class="ui-button">Export GLB</button>
+                    <input type="file" id="loadSceneInput" accept=".json" style="display: none;">
+                </div>`;
+            
+            document.getElementById('lighting-panel').innerHTML = `<div id="local-hdr-container" class="info-group" style="display: none;"><label for="local-hdr-select">Local Environment</label><select id="local-hdr-select"><option value="">-- Select Local HDR --</option></select></div><div class="info-group"><label for="hdr-select">Online Environment</label>
+			
+			<select id="hdr-select">
+			<option value="null">None (Dark)</option>
+    <option value="default.hdr">Default Local HDR</option> {/* <--- ADDED THIS LINE AT THE TOP */}
+    <optgroup label="Studio">
+        <option value="https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_small_03_1k.hdr">Studio Small</option>
+        <option value="https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/photo_studio_01_1k.hdr">Photo Studio</option>
+        <option value="https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/lenong_2_1k.hdr">Lenong Studio</option>
+    </optgroup>
+    <optgroup label="Indoor">
+        <option value="https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/aerodynamics_workshop_1k.hdr">Workshop</option> {/* REMOVED 'selected' from here */}
+        <option value="https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/brown_photostudio_02_1k.hdr">Brown Photostudio</option>
+        <option value="https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/small_empty_room_1_1k.hdr">Empty Room</option>
+    </optgroup>
+    <optgroup label="Outdoor">
+        <option value="https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/syferfontein_1d_clear_1k.hdr">Syferfontein Day</option>
+        <option value="https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/kloppenheim_06_1k.hdr">Kloppenheim</option>
+        <option value="https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/venice_sunset_1k.hdr">Venice Sunset</option>
+        <option value="https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/shanghai_bund_1k.hdr">Shanghai Night</option>
+    </optgroup>
+    <optgroup label="Special">
+        <option value="https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/peppermint_powerplant_2_1k.hdr">Industrial</option>
+    </optgroup>
+</select>
+			
+			<div class="info-group"><label>Background Intensity</label><div class="slider-container"><input type="range" id="backgroundIntensitySlider" min="0" max="4" value="1" step="0.1"><span id="backgroundIntensityValue" class="slider-value">1.0</span></div></div><div class="info-group"><label>Scene Exposure</label><div class="slider-container"><input type="range" id="sceneExposureSlider" min="0" max="4" value="1" step="0.1"><span id="sceneExposureValue" class="slider-value">1.0</span></div></div><div class="info-group"><label>Lighting Mode</label><div class="radio-group"><input type="radio" id="modeSun" name="lightingMode" value="sun"><label for="modeSun">Sun</label><input type="radio" id="modeDefault" name="lightingMode" value="default"><label for="modeDefault">Default</label><input type="radio" id="modeCustom" name="lightingMode" value="custom" checked><label for="modeCustom">Custom</label></div></div><div id="default-light-controls" style="display:none;"><div class="info-group"><label>Default Light Intensity</label><div class="slider-container"><input type="range" id="defaultLightIntensitySlider" min="0" max="3" value="1.0" step="0.1"><span id="defaultLightIntensityValue" class="slider-value">1.0</span></div></div></div><div id="custom-light-controls"><div class="info-group"><label>Custom Spotlight Position</label><div class="vector-input-group"><input type="number" id="spotlight-pos-x" step="0.5" value="0"><input type="number" id="spotlight-pos-y" step="0.5" value="10"><input type="number" id="spotlight-pos-z" step="0.5" value="0"></div></div><div class="info-group"><label>Light & Shadow Properties</label><div class="slider-container" style="margin-bottom:8px;"><label class="slider-label">Color</label><input type="color" id="spotlight-color" value="#ffffff" style="width: 100%; height: 25px; padding: 2px; box-sizing: border-box;"></div><div class="slider-container"><label class="slider-label">Intensity</label><input type="range" id="spotlight-intensity" min="0" max="1000" value="15" step="0.1"></div><div class="slider-container"><label class="slider-label">Angle</label><input type="range" id="spotlight-angle" min="5" max="90" value="20" step="1"></div><div class="slider-container"><label class="slider-label">Softness</label><input type="range" id="spotlight-softness" min="0" max="1" value="0.5" step="0.01"></div><div class="slider-container"><label class="slider-label">Shadow Darkness</label><input type="range" id="spotlight-shadow-darkness" min="0" max="1" value="0.6" step="0.01"></div></div></div><div id="sun-controls" style="display:none;"><div class="info-group"><label>Manual Sun Position</label><div class="slider-container" style="margin-bottom:5px;"><label for="sunAltitudeSlider" class="slider-label">Altitude</label><input type="range" id="sunAltitudeSlider" min="0" max="90" value="45" step="1"><span id="sunAltitudeValue" class="slider-value">45°</span></div><div class="slider-container"><label for="sunAzimuthSlider" class="slider-label">Azimuth</label><input type="range" id="sunAzimuthSlider" min="0" max="360" value="45" step="1"><span id="sunAzimuthValue" class="slider-value">45°</span></div></div></div><div class="info-group"><label>Scene Visibility</label><div class="visibility-toggle-group"><label for="shadowToggle">Shadows</label><label class="switch"><input type="checkbox" id="shadowToggle" checked><span class="slider-knob"></span></label></div><div class="visibility-toggle-group"><label for="groundToggle">Ground</label><label class="switch"><input type="checkbox" id="groundToggle" checked><span class="slider-knob"></span></label></div><div class="visibility-toggle-group"><label for="gridToggle">Grid</label><label class="switch"><input type="checkbox" id="gridToggle"><span class="slider-knob"></span></label></div><div class="visibility-toggle-group"><label for="spotlightHelperToggle">Show Light Helper</label><label class="switch"><input type="checkbox" id="spotlightHelperToggle"><span class="slider-knob"></span></label></div></div>`;
+            document.getElementById('paths-panel').innerHTML = `<div class="info-group">
+                    <label for="compute-path-input">Rhino.Compute Path</label>
+                    <input type="text" id="compute-path-input" placeholder="C:/Path/To/rhino.compute.exe">
+                    <button id="start-compute-btn" style="margin-top: 5px; background: #28a745;">Start Compute</button>
+                    <small id="compute-status" style="display: block; margin-top: 5px; color: #ccc;"></small>
+                </div>`;
+            document.getElementById('camera-panel').innerHTML = `<div class="info-group"><div class="visibility-toggle-group"><label for="camera-mode-toggle">Orthographic</label><label class="switch"><input type="checkbox" id="camera-mode-toggle"><span class="slider-knob"></span></label></div></div><div class="info-group"><label>Dolly Zoom</label><div class="slider-container"><input type="range" id="dolly-zoom-slider" min="0" max="100" value="35.7" step="0.1"><span id="dolly-zoom-fov" class="slider-value">50.0°</span></div></div><div class="info-group"><label>Camera Position</label><div class="vector-input-group"><input type="number" id="cam-pos-x" step="0.1"><input type="number" id="cam-pos-y" step="0.1"><input type="number" id="cam-pos-z" step="0.1"></div></div><div class="info-group"><label>Camera Target</label><div class="vector-input-group"><input type="number" id="cam-target-x" step="0.1"><input type="number" id="cam-target-y" step="0.1"><input type="number" id="cam-target-z" step="0.1"></div></div><div class="info-group"><button id="zoomExtentsBtn" class="ui-button">Zoom Extents</button></div>`;
+			document.getElementById('sun-path-panel').innerHTML = `<div class="info-group"><div class="visibility-toggle-group"><label for="sunPathToggle">Show Diagram</label><label class="switch"><input type="checkbox" id="sunPathToggle"><span class="slider-knob"></span></label></div></div><div class="info-group"><label>Location & Date</label><div class="slider-container" style="margin-bottom:5px;"><label for="latitudeSlider" class="slider-label">Latitude</label><input type="range" id="latitudeSlider" min="-90" max="90" value="51.5" step="0.1"><input type="number" id="latitudeNumber" value="51.5" step="0.1" style="width:60px;"></div><div class="slider-container" style="margin-bottom:8px;"><label for="longitudeSlider" class="slider-label">Longitude</label><input type="range" id="longitudeSlider" min="-180" max="180" value="-0.1" step="0.1"><input type="number" id="longitudeNumber" value="-0.1" step="0.1" style="width:60px;"></div><input type="date" id="dateInput" value="${today}"></div><div class="info-group"><label>Time of Day</label><div class="slider-container"><input type="range" id="timeOfDaySlider" min="0" max="24" value="12" step="0.1"><span id="timeOfDayValue" class="slider-value">12:00</span></div></div>`;
+            document.getElementById('object-inspector').innerHTML = `<div class="info-group"><label for="object-select">Selected Object</label><div style="display:flex;gap:10px;align-items:center;"><select id="object-select" style="flex-grow:1;"></select><label class="switch" title="Highlight Selection / Enable Click-to-Select"><input type="checkbox" id="inspector-highlight-toggle"><span class="slider-knob"></span></label></div></div><div id="inspector-details" hidden><div class="visibility-toggle-group"><label for="inspector-visibility-toggle">Visible</label><label class="switch"><input type="checkbox" id="inspector-visibility-toggle" checked><span class="slider-knob"></span></label></div><div class="visibility-toggle-group"><label for="inspector-twosided-toggle">Two-Sided</label><label class="switch"><input type="checkbox" id="inspector-twosided-toggle"><span class="slider-knob"></span></label></div><hr class="inspector-separator"><div class="info-group"><label>Information</label><dl class="info-dl"><dt>Vertices</dt><dd id="inspector-vertices"></dd><dt>Faces</dt><dd id="inspector-faces"></dd><dt>Volume</dt><dd id="inspector-volume"></dd></dl></div><hr class="inspector-separator"><div class="info-group"><label for="material-preset">Material Preset</label><select id="material-preset"><option value="standard">Standard</option><option value="glass">Glass (Refractive)</option><option value="diamond">Diamond</option><option value="polished_metal">Polished Metal</option><option value="jade">Jade</option><option value="velvet">Velvet</option><option value="shadow_catcher">Shadow Catcher</option></select></div><div id="inspector-material-controls"><div class="info-group"><label>Core Properties</label><input type="color" id="inspector-color" style="height:30px;padding:2px;width:100%;box-sizing:border-box;"><div class="slider-container" style="margin-top:8px;"><label for="inspector-roughness" class="slider-label">Rough</label><input type="range" id="inspector-roughness" min="0" max="1" step="0.01"></div><div class="slider-container"><label for="inspector-metalness" class="slider-label">Metal</label><input type="range" id="inspector-metalness" min="0" max="1" step="0.01"></div></div><div id="physical-props"><hr class="inspector-separator"><div class="info-group"><label>Physical & Reflection</label><div class="slider-container"><label for="inspector-opacity" class="slider-label">Opacity</label><input type="range" id="inspector-opacity" min="0" max="1" step="0.01"></div><div class="slider-container"><label for="inspector-envmap-intensity" class="slider-label">Env Power</label><input type="range" id="inspector-envmap-intensity" min="0" max="5" step="0.05"></div><div class="slider-container"><label for="inspector-transmission" class="slider-label">Transmit</label><input type="range" id="inspector-transmission" min="0" max="1" step="0.01"></div><div class="slider-container"><label for="inspector-ior" class="slider-label">IOR</label><input type="range" id="inspector-ior" min="1.0" max="2.4" step="0.01" value="1.5"></div><div class="slider-container"><label for="inspector-thickness" class="slider-label">Thick</label><input type="range" id="inspector-thickness" min="0" max="5" step="0.1"></div></div></div><div id="iridescence-props" class="info-group"><hr class="inspector-separator"><label>Iridescence (Fire)</label><div class="slider-container"><label for="inspector-iridescence" class="slider-label">Amount</label><input type="range" id="inspector-iridescence" min="0" max="1" step="0.01"></div><div class="slider-container"><label for="inspector-iridescence-ior" class="slider-label">IOR</label><input type="range" id="inspector-iridescence-ior" min="1.0" max="2.4" step="0.01"></div><div class="slider-container"><label for="inspector-iridescence-thickness" class="slider-label">Range</label><input type="range" id="inspector-iridescence-thickness" min="0" max="800" step="1"></div></div><div id="coat-props" class="info-group"><hr class="inspector-separator"><label>Coat Properties (Varnish)</label><div class="slider-container"><label for="inspector-clearcoat" class="slider-label">Coat</label><input type="range" id="inspector-clearcoat" min="0" max="1" step="0.01"></div><div class="slider-container"><label for="inspector-clearcoat-roughness" class="slider-label">Coat Rough</label><input type="range" id="inspector-clearcoat-roughness" min="0" max="1" step="0.01"></div></div></div></div>`;
+
+                        async function loadLocalHdrs(viewerInstance) {
+                let defaultHdrLoaded = false; // Flag to track if default.hdr has been handled
+
+                try {
+                    const response = await fetch('http://localhost:8000/api/list-hdrs');
+                    if (!response.ok) throw new Error(`Could not fetch HDR list: ${response.statusText}`);
+                    const hdrList = await response.json();
+                    
+                    if (hdrList && hdrList.length > 0) {
+                        const select = document.getElementById('local-hdr-select');
+                        const container = document.getElementById('local-hdr-container');
+                        select.innerHTML = '<option value="">-- Select Local HDR --</option>';
+                        let apartmentDiffusePath = null; // Changed from 'hdrs/Default.hdr'
+                        hdrList.forEach(hdr => {
+                            const option = document.createElement('option');
+                            option.value = hdr.path; option.textContent = hdr.name;
+                            select.appendChild(option);
+                            if (hdr.name.toLowerCase() === 'apartment diffuse') { // Or your preferred local default
+                                apartmentDiffusePath = hdr.path;
+                            }
+                        });
+                        
+                        if (apartmentDiffusePath) {
+                            select.value = apartmentDiffusePath;
+                            viewerInstance.loadHDREnvironment(apartmentDiffusePath);
+                            defaultHdrLoaded = true; // Mark as handled
+                        } 
+                        if (!select.dataset.listenerAttached) {
+                            select.addEventListener('change', (e) => {
+                                if (e.target.value) {
+                                    document.getElementById('hdr-select').value = 'null'; // Deselect "Online"
+                                    viewerInstance.loadHDREnvironment(e.target.value);
+                                    defaultHdrLoaded = true; // Mark as handled if user selects from here
+                                }
+                            });
+                            select.dataset.listenerAttached = 'true';
+                        }
+                        container.style.display = 'block';
+                    }
+                } catch (error) {
+                    console.error("Could not load local HDR list from /hdrs/ folder. Is the Flask server running?", error);
+                }
+
+                // If no preferred local HDR was loaded from /hdrs/, try loading default.hdr from the "Online" list
+                if (!defaultHdrLoaded) {
+                    const onlineHdrSelect = document.getElementById('hdr-select');
+                    // Check if default.hdr is an option and no other HDR is already selected by user action
+                    if (onlineHdrSelect.options[0].value === 'default.hdr') {
+                         // Only set if current value is the placeholder for "Workshop" or "None"
+                        const currentValue = onlineHdrSelect.value;
+                        if (currentValue.includes('aerodynamics_workshop') || currentValue === 'null' || currentValue === '') {
+                            onlineHdrSelect.value = 'default.hdr';
+                            onlineHdrSelect.dispatchEvent(new Event('change')); // Trigger load
+                        }
+                    } else { // Fallback if default.hdr isn't first or if something else went wrong
+                        onlineHdrSelect.value = 'null'; // Or your preferred PolyHaven default
+                        onlineHdrSelect.dispatchEvent(new Event('change'));
+                    }
+                }
+            }
+
+            async function startServerProcess(serverName) {
+                const pathInputId = 'compute-path-input';
+                const statusId = 'compute-status';
+                const path = document.getElementById(pathInputId).value;
+                const statusEl = document.getElementById(statusId);
+
+                if (!path) {
+                    statusEl.textContent = 'Error: Path is empty.';
+                    statusEl.style.color = '#dc3545';
+                    return;
+                }
+
+                try {
+                    statusEl.textContent = 'Starting...';
+                    statusEl.style.color = '#ffc107';
+
+                    const response = await fetch('http://localhost:8000/api/start-server', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ server: serverName, path: path })
+                    });
+                    const result = await response.json();
+                    if(response.ok) {
+                        statusEl.textContent = result.message;
+                        statusEl.style.color = '#28a745';
+                    } else {
+                        throw new Error(result.message || 'Unknown error');
+                    }
+                } catch(err) {
+                    console.error(`Failed to start ${serverName} server:`, err);
+                    statusEl.textContent = `Error: ${err.message}`;
+                    statusEl.style.color = '#dc3545';
+                }
+            }
+            
+            const viewer = new Viewer();
+            viewer.rhino = rhino; 
+            
+            loadLocalHdrs(viewer);
+            
+            document.getElementById('compute-path-input').value = localStorage.getItem('compute-path') || '';
+            document.getElementById('compute-path-input').addEventListener('input', (e) => localStorage.setItem('compute-path', e.target.value));
+            document.getElementById('start-compute-btn').addEventListener('click', () => startServerProcess('compute'));
+        });
+    </script>
+</body>
+</html>
